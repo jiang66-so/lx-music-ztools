@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -15,5 +15,6 @@
     "noImplicitAny": false,
     "types": ["@ztools-center/ztools-api-types"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/ztools/entry.ts"]
 }

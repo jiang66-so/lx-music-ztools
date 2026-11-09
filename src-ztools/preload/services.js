@@ -4,11 +4,15 @@ const { randomUUID } = require('node:crypto')
 const { createBridge } = require('./runtime/bridge.cjs')
 const { createLifecycle } = require('./runtime/lifecycle.cjs')
 const { initializeRuntime } = require('./runtime/index.cjs')
+const os = require('node:os')
+const { clipboard } = require('electron')
 const bridge = createBridge()
+bridge.setSnapshot('host:env', { platform: process.platform, release: os.release(), homedir: os.homedir(), tmpdir: os.tmpdir(), arch: os.arch(), cpus: os.cpus().map(({ model }) => ({ model })) })
 const runtime = initializeRuntime({ bridge, directory: window.ztools.getPath('pluginData') })
 window.lxHost = Object.fromEntries(['invoke', 'send', 'readSnapshot', 'on', 'once', 'off', 'offAll', 'subscribe'].map(key => [key, bridge[key]]))
 let lifecycleProbe
 window.services = {
+  clipboardReadText() { return clipboard.readText() },
   subscribe(channel, listener) { return bridge.subscribe(channel, listener) },
   startLifecycleProbe() {
     if (!lifecycleProbe) {

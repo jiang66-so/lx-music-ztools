@@ -4,6 +4,10 @@
 
 版本：第二版，依据全部 14 页 ZTools 文档与本地源码重新核对。状态：设计与实施规划，尚未开始产品代码实现；文中的验证门槛是待完成工作，不表示已通过。
 
+实施修订（2026-11-09）：用户指定在现有独立仓库 `D:\user\Documents\基础项目\lx-music-ztools` 实施。P0 已在隔离的已安装 app.asar + Electron 42.3.3 组合通过；细项见 `docs/ztools/host-capabilities.md`。当前不是完整移植交付，已实现/待验证范围见 `docs/ztools/compatibility.md`，下文未完成的门槛仍为待办。
+
+P0 后固定的实现取舍：原 LX 源码作为 vendor/lx 只读基线，产品界面使用独立 Webpack，现有 Vite 保留诊断用途。音源使用可信 loopback frame 启动的 CSP 浏览器 Worker，脚本不进入 frame/插件页面；不采用未能初始化的 guest。结构化数据使用已经实测的 pluginData + 内置 node:sqlite，保留原 LX SQL 数据模型和事务，不附带 better-sqlite3；原“host db 不可变分块 + 活动指针”方案保留为背景比较，当前不实施，256 KiB 分块要求仅适用于未来 host db 方案。存储不跟随 ZTools 云账号切换，设备本地曲库由显式 LX 同步/备份迁移。运行时必须检测 SQLite 可用性，不对未验证宿主声明兼容。
+
 ## 需求与已确认选择
 
 用户要求将 `https://github.com/lyswhut/lx-music-desktop.git` 参考 ZTools 官方插件规范移植，仓库允许拉取到当前工作目录。

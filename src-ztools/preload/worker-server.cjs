@@ -4,9 +4,10 @@ const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 
 /** Serve only the trusted browser Worker with an enforced network-denying CSP. */
-async function startWorkerServer() {
+async function startWorkerServer(scriptName = 'source-worker.js') {
   const token = randomUUID()
-  const script = fs.readFileSync(path.join(__dirname, '../dist/source-worker.js'))
+  if (!['source-worker.js', 'probe-worker.js'].includes(scriptName)) throw new Error('Unknown Worker entry')
+  const script = fs.readFileSync(path.join(__dirname, '../dist', scriptName))
   let requests = 0
   const server = http.createServer((req, res) => {
     requests++

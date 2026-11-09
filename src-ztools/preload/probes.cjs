@@ -62,7 +62,7 @@ async function probeSourceIsolation() {
   return result
 }
 async function probeWorkerIsolation(publicKey) {
-  const server = await startWorkerServer()
+  const server = await startWorkerServer('probe-worker.js')
   const frame = document.createElement('iframe')
   frame.style.display = 'none'
   frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')

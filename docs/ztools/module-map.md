@@ -19,3 +19,5 @@
 | hotKey / tray / updater | 全局注册与应用管理 | 插件指令、宿主快捷键设置、宿主更新 | 任务 10 |
 
 已扫描 renderer/common 的真实 Electron 入口：common/rendererIpc.ts、common/utils/electron.ts，electron-log/node 由 common/utils/index.ts 导入。renderer 内 electron-updater 引用为类型，不装载应用更新器。Node 入口按依赖图继续分类，未适配通道必须报错，不允许空返回掩盖缺失功能。
+
+实施进展：列表及其事件/IPC、设置、JSON KV、主题、原网络请求和音源管理已接入。Node 服务复用原 request.js 的平台请求构造，版本输入固定为 LX 基线；前端通过可取消的 network:fetch 调用，DNS 使用受控服务。CJS 转换对平台请求日志作静默处理，避免记录可能带访问参数的 URL。原 Vue 页面已在实际宿主渲染；可见基本设置截图与检验日志保存在 artifacts/renderer。worker 的 Node 文件能力继续迁入服务；移植中的具体未完成项以 compatibility.md 为准。

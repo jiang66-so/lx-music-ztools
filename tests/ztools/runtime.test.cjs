@@ -26,5 +26,12 @@ test('original LX IPC handlers persist settings and publish committed list opera
   lx.event_app.update_config({ 'player.volume': 0.6 })
   assert.equal((await bridge.invoke(names.CMMON_EVENT_NAME.get_app_setting))['player.volume'], 0.6)
   assert.deepEqual(changes, [['player.volume']])
+  const themes = await bridge.invoke(names.WIN_MAIN_RENDERER_EVENT_NAME.get_themes)
+  assert.ok(themes.themes.length > 0)
+  const custom = { ...themes.themes[0], id: 'user_test', name: 'Test theme', isCustom: true }
+  await bridge.invoke(names.WIN_MAIN_RENDERER_EVENT_NAME.save_theme, custom)
+  assert.equal((await bridge.invoke(names.WIN_MAIN_RENDERER_EVENT_NAME.get_themes)).userThemes.length, 1)
+  await bridge.invoke(names.WIN_MAIN_RENDERER_EVENT_NAME.remove_theme, custom.id)
+  assert.equal((await bridge.invoke(names.WIN_MAIN_RENDERER_EVENT_NAME.get_themes)).userThemes.length, 0)
   await runtime.dispose()
 })
