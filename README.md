@@ -1,281 +1,46 @@
-# lx-music-ztools
+# LX Music for ZTools
 
-> LX Music 原生插件：框架与发布链路验证
+当前为 **0.0.1 框架验证版**，包含插件入口、生命周期、preload 诊断和插件存储验证。音乐搜索、音源、播放、下载与同步尚未移植。
 
-这是一个使用 **Vue 3 + Vite + TypeScript** 构建的 ZTools 插件。
+## 开发与安装
 
-## ✨ 功能特性
-
-### 📌 已包含的示例功能
-
-- **Hello** - 基础功能指令示例
-  - 触发指令：`你好` / `hello`
-  - 展示简单的 Vue 组件界面
-
-- **读文件** - 文件读取功能示例
-  - 功能指令：`读文件`
-  - 匹配指令：支持拖拽文件触发
-  - 演示如何使用 Node.js 能力读取文件内容
-
-- **保存为文件** - 文件写入功能示例
-  - 匹配指令：任意文本/图片 → `保存为文件`
-  - 演示如何将剪贴板内容保存为文件
-
-## 📁 项目结构
-
-```
-.
-├── src-ztools/
-│   ├── logo.png              # 插件图标
-│   ├── plugin.json           # 插件配置文件
-│   └── preload/              # Preload 脚本目录
-│       ├── package.json      # Preload 依赖配置
-│       └── services.js       # Node.js 能力扩展
-├── src/
-│   ├── main.ts               # 入口文件
-│   ├── main.css              # 全局样式
-│   ├── App.vue               # 根组件
-│   ├── env.d.ts              # 类型声明
-│   ├── Hello/                # Hello 功能组件
-│   │   └── index.vue
-│   ├── Read/                 # 读文件功能组件
-│   │   └── index.vue
-│   └── Write/                # 写文件功能组件
-│       └── index.vue
-├── index.html                # HTML 模板
-├── vite.config.js            # Vite 配置
-├── tsconfig.json             # TypeScript 配置
-├── package.json              # 项目依赖
-└── README.md                 # 项目文档
-```
-
-## 🚀 快速开始
-
-### 安装依赖
-
-```bash
-npm install
-```
-
-### 开发模式
-
-```bash
+```powershell
+npm ci
 npm run dev
 ```
 
-开发服务器将在 `http://localhost:5173` 启动。ZTools 会自动加载开发版本。
+在 ZTools 开发者工具中选择 `src-ztools/plugin.json` 并安装开发模式。输入「洛雪音乐」「LX Music」或「lxmusic」打开插件。
 
-### 构建生产版本
-
-```bash
-npm run build
+```powershell
+npm run pack
 ```
 
-构建产物将输出到 `src-ztools/dist/` 目录，`src-ztools/` 是完整的 ZTools 插件目录。
+构建输出为 `src-ztools/dist`；**完整运行目录是 `src-ztools`**，其中包含 plugin.json、logo.png、preload 和 dist。ZIP 输出到工作目录同级的 `output/lx-music-ztools`，可在 ZTools 本地安装。生产运行不依赖开发服务器。
 
-## 📖 开发指南
+## 验证
 
-### 1. 修改插件配置
+- `npm run build`：类型检查、前端构建、插件安装目录校验。
+- `npm run test:publish`：调用官方 CLI 1.3.2，在新临时 Git 仓库中两次发布；GitHub 和认证被替换成测试响应，不创建线上 PR。
+- `npm run test:host`：使用独立 Electron 运行本机 ZTools app.asar，测试数据写入独立临时目录。通过 `ZTOOLS_EXECUTABLE` 指定 Electron 可执行文件，通过 `ZTOOLS_APP` 指定 ZTools app.asar；两者均需已存在。宿主测试不使用用户真实配置。
 
-编辑 `src-ztools/plugin.json` 文件：
+截图和 JSON 报告放在同级 `output/lx-music-ztools`。
 
-```json
-{
-  "name": "你的插件名称",
-  "description": "插件描述",
-  "author": "作者名称",
-  "version": "1.0.0",
-  "features": [
-    // 添加你的功能配置
-  ]
-}
+## 真实发布
+
+```powershell
+gh auth status
+npm run pack
+git add .
+git commit -m "chore: prepare release"
+npm run publish:plugin
 ```
 
-### 2. 创建新功能
+发布包装器复用已登录的 gh 凭据，仅替换官方 CLI 的认证入口；其余发布校验、Fork、同步、提交、推送和 Draft PR 由官方 CLI 执行。缓存位于 `~/.config/ztools/lx-music-ztools`，凭据仅用于当前进程，完成后清除缓存 remote URL 中的凭据。
 
-#### 步骤 1: 创建 Vue 组件
+CLI 1.3.2 要求版本日志标题 `## 0.0.1 - YYYY-MM-DD`、非默认图标以及干净的 Git 工作区。该版本会从最新 upstream/main 重建发布分支，并使用精确 force-with-lease 防止覆盖竞态提交；这与官网页面旧版“只追加、不改写”的描述不同。
 
-在 `src/` 目录下创建新的功能组件：
+Draft PR 创建后仍需补充截图并审核自检清单。框架验证版保持 Draft，不宣称已完成音乐功能。
 
-```vue
-<!-- src/MyFeature/index.vue -->
-<template>
-  <div class="my-feature">
-    <h1>{{ title }}</h1>
-    <!-- 你的组件内容 -->
-  </div>
-</template>
+## 来源与许可
 
-<script setup lang="ts">
-import { ref } from 'vue'
-
-const title = ref('我的新功能')
-</script>
-
-<style scoped>
-.my-feature {
-  padding: 20px;
-}
-</style>
-```
-
-#### 步骤 2: 注册路由
-
-在 `src/App.vue` 中添加路由：
-
-```vue
-<script setup lang="ts">
-import MyFeature from './MyFeature/index.vue'
-
-const routes = {
-  hello: Hello,
-  read: Read,
-  write: Write,
-  myfeature: MyFeature // 添加新路由
-}
-</script>
-```
-
-#### 步骤 3: 配置功能
-
-在 `plugin.json` 中添加功能配置：
-
-```json
-{
-  "code": "myfeature",
-  "explain": "我的新功能",
-  "icon": "logo.png",
-  "cmds": ["触发指令"]
-}
-```
-
-### 3. 使用 Node.js 能力
-
-#### 扩展 Preload 服务
-
-编辑 `src-ztools/preload/services.js`：
-
-```javascript
-const fs = require('fs')
-const path = require('path')
-
-module.exports = {
-  // 示例：读取文件
-  readFile: (filePath) => {
-    return fs.readFileSync(filePath, 'utf-8')
-  },
-
-  // 添加你的服务
-  myService: (params) => {
-    // 实现你的逻辑
-    return result
-  }
-}
-```
-
-#### 在 Vue 组件中调用
-
-```vue
-<script setup lang="ts">
-const handleRead = async () => {
-  try {
-    const content = await window.services.readFile('/path/to/file')
-    console.log(content)
-  } catch (error) {
-    console.error('读取失败:', error)
-  }
-}
-</script>
-```
-
-### 4. 使用 ZTools API
-
-```vue
-<script setup lang="ts">
-// 获取剪贴板内容
-const text = await window.ztools.getClipboardContent()
-
-// 隐藏主窗口
-window.ztools.hideMainWindow()
-
-// 显示提示
-window.ztools.showTip('操作成功')
-
-// 更多 API 请参考官方文档
-</script>
-```
-
-## 🎨 样式开发
-
-### 使用 CSS 变量
-
-ZTools 提供了一套 CSS 变量用于主题适配：
-
-```css
-.my-component {
-  background: var(--bg-color);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-}
-```
-
-### 暗色模式支持
-
-```css
-@media (prefers-color-scheme: dark) {
-  .my-component {
-    /* 暗色模式样式 */
-  }
-}
-```
-
-## 📦 构建与发布
-
-### 1. 构建插件
-
-```bash
-npm run build
-```
-
-### 2. 测试构建产物
-
-将 `src-ztools/` 目录作为完整插件目录复制到 ZTools 插件目录进行测试。
-
-### 3. 发布到插件市场
-
-1. 确保 `plugin.json` 中的信息完整准确
-2. 准备好插件截图和详细说明
-3. 访问 ZTools 插件市场提交插件
-
-## 📚 相关资源
-
-- [ZTools 官方文档](https://github.com/ztool-center/ztools)
-- [ZTools API 文档](https://github.com/ztool-center/ztools-api-types)
-- [Vue 3 文档](https://vuejs.org/)
-- [Vite 文档](https://vitejs.dev/)
-
-## ❓ 常见问题
-
-### Q: 如何调试插件？
-
-A: 使用 `npm run dev` 启动开发服务器，在插件界面中点击插件头像图标，在弹出的菜单中选择"打开开发者工具"进行调试。
-
-### Q: 如何访问 Node.js 能力？
-
-A: 通过 `src-ztools/preload/services.js` 文件扩展服务，然后在组件中使用 `window.services` 调用。
-
-### Q: 插件图标不显示？
-
-A: 确保 `src-ztools/logo.png` 文件存在，且在 `plugin.json` 中正确配置了 `logo` 字段。
-
-### Q: 如何处理大文件上传？
-
-A: 建议使用 Node.js 流式处理，在 preload 脚本中实现文件分块处理逻辑。
-
-## 📄 开源协议
-
-MIT License
-
----
-
-**祝你开发愉快！** 🎉
+框架来自 ZTools 官方 Vue + TypeScript + Vite 模板。图标来自 lyswhut/lx-music-desktop，保留其 LICENSE；此项目为第三方移植开发，不是 LX 官方发行版。

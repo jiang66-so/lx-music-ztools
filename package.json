@@ -8,8 +8,9 @@
     "build": "vue-tsc && vite build && node scripts/check.mjs",
     "check": "node scripts/check.mjs",
     "pack": "npm run build && node scripts/package.mjs",
-    "publish:plugin": "ztools publish",
-    "test:publish": "node scripts/rehearse-publish.mjs"
+    "publish:plugin": "node scripts/publish.mjs",
+    "test:publish": "node scripts/rehearse-publish.mjs",
+    "test:host": "node scripts/test-host.mjs"
   },
   "dependencies": {
     "vue": "^3.5.13"
