@@ -22,8 +22,8 @@ function createSources({ database, network, onStatus, onAlert }) {
   let entries = store.get('entries', []), selected, session, activation, generation = 0
   let status = { status: false, message: '' }
   const list = () => entries.map(({ script, hash, ...info }) => ({ ...info }))
-  const persist = () => store.set('entries', entries)
-  const publish = next => { status = next; onStatus?.(structuredClone(next)) }
+  const commit = next => { store.set('entries', next); entries = next }
+  const publish = (next, notify = true) => { status = next; if (notify) onStatus?.(structuredClone(next)) }
   return {
     list,
     importScript(script) {
@@ -31,7 +31,7 @@ function createSources({ database, network, onStatus, onAlert }) {
       const hash = createHash('sha256').update(script).digest('hex')
       if (entries.some(entry => entry.hash === hash)) throw new Error('导入失败，脚本内容与已有音源相同')
       const apiInfo = { id: `user_api_${randomUUID()}`, ...info, allowShowUpdateAlert: true }
-      entries.push({ ...apiInfo, script, hash }); persist()
+      commit([...entries, { ...apiInfo, script, hash }])
       return { apiInfo, apiList: list() }
     },
     activate(id) {
@@ -44,9 +44,10 @@ function createSources({ database, network, onStatus, onAlert }) {
         const entry = entries.find(item => item.id === id)
         if (!entry) { session = null; publish({ status: false, message: '' }); return }
         const { script, hash, ...apiInfo } = entry
-        publish({ status: false, message: 'initing', apiInfo })
+        // LX resolves its initialization promise on false+apiInfo; emit only terminal results.
+        publish({ status: false, message: 'initing', apiInfo }, false)
         const next = session = new SourceSession({ info: { ...apiInfo, script }, network,
-          onAlert: alert => { if (current === generation && entry.allowShowUpdateAlert) onAlert?.({ name: entry.name, ...alert }) } })
+          onAlert: alert => { if (current === generation && entries.find(item => item.id === id)?.allowShowUpdateAlert) onAlert?.({ name: entry.name, ...alert }) } })
         try {
           const sources = await next.start()
           if (current !== generation) throw new Error('source changed')
@@ -62,10 +63,10 @@ function createSources({ database, network, onStatus, onAlert }) {
     request: input => session ? session.request(input) : Promise.reject(new Error('没有可用的音源')),
     cancel: key => session?.cancel(key),
     async remove(ids) {
+      commit(entries.filter(entry => !ids.includes(entry.id)))
       if (ids.includes(selected)) { ++generation; await session?.close(); session = null; activation = null; selected = null; publish({ status: false, message: '' }) }
-      entries = entries.filter(entry => !ids.includes(entry.id)); persist()
     },
-    setAllowUpdate(id, enable) { const entry = entries.find(item => item.id === id); if (entry) { entry.allowShowUpdateAlert = Boolean(enable); persist() } },
+    setAllowUpdate(id, enable) { if (entries.some(item => item.id === id)) commit(entries.map(entry => entry.id === id ? { ...entry, allowShowUpdateAlert: Boolean(enable) } : entry)) },
     async dispose() { ++generation; await session?.close(); session = null },
   }
 }

@@ -1,29 +1,39 @@
 # LX Music for ZTools
 
-当前为 **0.0.1 框架验证版**，包含插件入口、生命周期、preload 诊断和插件存储验证。音乐搜索、音源、播放、下载与同步尚未移植。
+将 LX Music 2.12.6 移植到 ZTools 的开发项目，不依赖另装 LX 桌面版。当前版本为 **0.0.1 开发版**，完整移植仍在进行。
+
+目前已验证原 LX 界面、自定义音源本地/URL 导入、隔离执行、受控音源解析与音频播放、暂停/继续、后台播放及下一首。下载、同步、开放 API 等功能尚未完成验证，详见 [功能与验证状态](docs/ztools/compatibility.md)。不预置第三方音源。
 
 ## 开发与安装
 
 ```powershell
 npm ci
-npm run dev
+npm ci --prefix src-ztools/preload
+npm run build:ztools
 ```
 
-在 ZTools 开发者工具中选择 `src-ztools/plugin.json` 并安装开发模式。输入「洛雪音乐」「LX Music」或「lxmusic」打开插件。
+本地代码和隔离测试中的安装记录不会自动出现在日常使用的 ZTools 中。把 `src-ztools/plugin.json` 导入 ZTools 开发项目，然后安装、启用项目，才能输入「洛雪音乐」「LX Music」或「lxmusic」打开插件。
 
 ```powershell
 npm run pack
 ```
 
-构建输出为 `src-ztools/dist`；**完整运行目录是 `src-ztools`**，其中包含 plugin.json、logo.png、preload 和 dist。ZIP 输出到工作目录同级的 `output/lx-music-ztools`，可在 ZTools 本地安装。生产运行不依赖开发服务器。
+完整运行目录为 `src-ztools`，默认播放器入口为 `dist/lx.html`。构建包含原 LX Webpack 前端、逐模块可读 CommonJS 服务与隔离音源 Worker。ZIP 输出到工作目录同级的 `output/lx-music-ztools`，包含运行依赖，不需要开发服务器。
+
+在 ZTools「设置 → 插件应用 → 导入本地插件」选择 ZIP，确认安装并启用，再输入 `lxmusic` 打开。音源在原 LX 设置的「自定义源管理」中通过本地 JS 或 URL 导入并选择。详见 [本地安装](docs/ztools/installation.md)。
 
 ## 验证
 
-- `npm run build`：类型检查、前端构建、插件安装目录校验。
+- `npm run build:ztools`：类型检查、前端和服务构建、插件安装目录校验。
+- `npm run test:ztools`：桥接、SQLite 事务、数据、设置、网络、文件能力与音源契约。
+- `npm run test:p0`：隔离音源、安全边界、宿主生命周期及存储能力。
+- `npm run test:source`：受控音源协议和原界面本地/URL 导入流程。
+- `npm run test:player`：原 LX 引擎播放受控 WAV，检查进度、暂停/继续、后台和下一首。
+- `node scripts/test-install.mjs`：实际 ZIP 安装后搜索 `lxmusic` 并打开原播放器。
 - `npm run test:publish`：调用官方 CLI 1.3.2，在新临时 Git 仓库中两次发布；GitHub 和认证被替换成测试响应，不创建线上 PR。
 - `npm run test:host`：使用独立 Electron 运行本机 ZTools app.asar，测试数据写入独立临时目录。通过 `ZTOOLS_EXECUTABLE` 指定 Electron 可执行文件，通过 `ZTOOLS_APP` 指定 ZTools app.asar；两者均需已存在。宿主测试不使用用户真实配置。
 
-截图和 JSON 报告放在同级 `output/lx-music-ztools`。
+原生移植测试报告位于 `artifacts/`。受控音源和音频结果不能代替用户真实音源、真实平台服务及人工听音验收。
 
 ## 真实发布
 
@@ -43,4 +53,4 @@ Draft PR 创建后仍需补充截图并审核自检清单。框架验证版保�
 
 ## 来源与许可
 
-框架来自 ZTools 官方 Vue + TypeScript + Vite 模板。图标来自 lyswhut/lx-music-desktop，保留其 LICENSE；此项目为第三方移植开发，不是 LX 官方发行版。
+原 LX 源码基线为 `lyswhut/lx-music-desktop@323e4bac`，只读保留在 `vendor/lx`，沿用 Apache-2.0 许可证。适配代码、构建及宿主替换模块位于其外，出处见 `vendor/lx/UPSTREAM.md`。项目从 ZTools 官方 Vue 模板起步，是第三方移植开发，不是 LX 官方发行版。

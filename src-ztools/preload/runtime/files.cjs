@@ -11,7 +11,7 @@ function canonical(target) {
     if (parent === current) throw new Error('Cannot resolve file path')
     suffix.unshift(path.basename(current)); current = parent
   }
-  return path.join(fs.realpathSync(current), ...suffix)
+  return path.join(fs.realpathSync.native(current), ...suffix)
 }
 function createFileScope(roots, grants = [], onChange) {
   const normalize = value => process.platform === 'win32' ? value.toLowerCase() : value
@@ -24,7 +24,7 @@ function createFileScope(roots, grants = [], onChange) {
     authorize(target) {
       if (typeof target !== 'string' || !target || target.includes('\0')) throw new TypeError('无效文件路径')
       const value = canonical(target), key = normalize(value)
-      if (!entries.some(entry => key === normalize(entry.path) || entry.directory && key.startsWith(normalize(entry.path) + path.sep))) throw Object.assign(new Error('尚未授权此文件或目录，请重新选择'), { code: 'PATH_NOT_GRANTED' })
+      if (!entries.some(entry => key === normalize(entry.path) || entry.directory && key.startsWith(normalize(entry.path.endsWith(path.sep) ? entry.path : entry.path + path.sep)))) throw Object.assign(new Error('尚未授权此文件或目录，请重新选择'), { code: 'PATH_NOT_GRANTED' })
       return value
     },
   }

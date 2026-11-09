@@ -13,14 +13,15 @@ function copyDirectory(source, target) {
 }
 
 /** Load the actual production plugin in a separate, disposable ZTools instance. */
-export async function startHost(entry = 'dist/index.html') {
+export async function startHost(entry, { zip } = {}) {
   const data = mkdtempSync(join(tmpdir(), 'lx-ztools-host-'))
   mkdirSync(join(data, 'legacy'))
   const plugin = join(data, 'plugin')
   copyDirectory(resolve('src-ztools'), plugin)
   const manifest = JSON.parse(readFileSync(join(plugin, 'plugin.json'), 'utf8'))
   delete manifest.development
-  manifest.main = entry
+  if (entry) manifest.main = entry
+  entry = manifest.main
   writeFileSync(join(plugin, 'plugin.json'), JSON.stringify(manifest))
   const app = await electron.launch({ executablePath: process.env.ZTOOLS_EXECUTABLE || resolve('../tmp/lx-electron-42/electron.exe'),
     args: [process.env.ZTOOLS_APP || 'D:/Program Files/ZTools/resources/app.asar'],
@@ -34,23 +35,34 @@ export async function startHost(entry = 'dist/index.html') {
     })
     const page = await app.firstWindow()
     await page.waitForSelector('.search-input', { timeout: 30000 })
-    const installed = await app.evaluate(async ({ ipcMain, BrowserWindow }, file) => {
+    const installed = await app.evaluate(async ({ ipcMain, BrowserWindow }, { file, zip }) => {
       const sender = BrowserWindow.getAllWindows().find(x => x.getTitle() === 'ZTools').webContents
+      if (zip) return ipcMain._invokeHandlers.get('install-plugin-from-path')({ sender }, zip)
       const registered = await ipcMain._invokeHandlers.get('upsert-dev-project-by-config-path')({ sender }, file)
       if (!registered.success) throw new Error(JSON.stringify(registered))
       return ipcMain._invokeHandlers.get('install-dev-plugin')({ sender }, registered.pluginName)
-    }, join(plugin, 'plugin.json'))
+    }, { file: join(plugin, 'plugin.json'), zip: zip ? resolve(zip) : null })
     assert.equal(installed.success, true, JSON.stringify(installed))
-    await page.locator('.search-input').fill('洛雪音乐')
-    await page.locator('.app-item').filter({ hasText: '洛雪音乐' }).first().click()
+    await page.locator('.search-input').fill('lxmusic')
+    await page.locator('.app-item').filter({ hasText: /lxmusic|洛雪音乐|LX Music/i }).first().click()
     const suffix = '/' + entry
     await expect.poll(() => app.evaluate(({ webContents }, suffix) => webContents.getAllWebContents().some(x => x.getURL().includes(suffix)), suffix), { timeout: 20000 }).toBe(true)
-    const evaluate = script => app.evaluate(({ webContents }, { suffix, script }) => {
-      const wc = webContents.getAllWebContents().find(x => x.getURL().includes(suffix))
-      if (!wc) throw new Error('Plugin WebContents not found')
-      return wc.executeJavaScript(script)
-    }, { suffix, script })
-    return { app, page, data, plugin, evaluate, logs: () => app.evaluate(() => globalThis.__lxTestConsole), close: () => app.close() }
+    const evaluate = async (script, timeout = 35000) => {
+      let timer
+      try {
+        return await Promise.race([app.evaluate(({ webContents }, { suffix, script }) => {
+          const wc = webContents.getAllWebContents().find(x => x.getURL().includes(suffix))
+          if (!wc) throw new Error('Plugin WebContents not found')
+          return wc.executeJavaScript(script)
+        }, { suffix, script }), new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Plugin evaluation timed out')), timeout) })])
+      } finally { clearTimeout(timer) }
+    }
+    const close = async () => {
+      // Only this launch's process: a blocked native dialog must not leave a test host running.
+      const timer = setTimeout(() => app.process()?.kill(), 5000)
+      try { await app.close() } finally { clearTimeout(timer) }
+    }
+    return { app, page, data, plugin, evaluate, logs: () => app.evaluate(() => globalThis.__lxTestConsole), close }
   } catch (error) {
     mkdirSync('artifacts', { recursive: true })
     const logs = await app.evaluate(() => globalThis.__lxTestConsole).catch(() => [])

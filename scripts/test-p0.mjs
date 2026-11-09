@@ -19,10 +19,11 @@ function copyDirectory(source, target) {
 }
 copyDirectory(resolve('src-ztools'), plugin)
 const manifest = JSON.parse(readFileSync(join(plugin, 'plugin.json'), 'utf8'))
+const suffix = '/' + manifest.main
 delete manifest.development
 writeFileSync(join(plugin, 'plugin.json'), JSON.stringify(manifest, null, 2))
 let app
-const result = { data, time: new Date().toISOString(), checks: {} }
+const result = { data, entry: manifest.main, time: new Date().toISOString(), checks: {} }
 try {
   app = await electron.launch({
     executablePath: process.env.ZTOOLS_EXECUTABLE || resolve('../tmp/lx-electron-42/electron.exe'),
@@ -42,18 +43,18 @@ try {
   // Production entry without a development server: the page must be installed locally.
   await page.locator('.search-input').fill('洛雪音乐')
   await page.locator('.app-item').filter({ hasText: '洛雪音乐' }).first().click()
-  await expect.poll(() => app.evaluate(({ webContents }) => webContents.getAllWebContents().some(x => x.getURL().includes('/dist/index.html'))), { timeout: 20000 }).toBe(true)
-  const evaluate = code => app.evaluate(async ({ webContents }, code) => {
-    const wc = webContents.getAllWebContents().find(x => x.getURL().includes('/dist/index.html'))
+  await expect.poll(() => app.evaluate(({ webContents }, suffix) => webContents.getAllWebContents().some(x => x.getURL().includes(suffix)), suffix), { timeout: 20000 }).toBe(true)
+  const evaluate = code => app.evaluate(async ({ webContents }, { code, suffix }) => {
+    const wc = webContents.getAllWebContents().find(x => x.getURL().includes(suffix))
     return wc.executeJavaScript(code)
-  }, code)
+  }, { code, suffix })
   assert.equal(await evaluate('typeof window.services.probeCapabilities'), 'function', 'P0 requires real source isolation and persistence probes')
   result.checks = await evaluate('window.services.probeCapabilities()')
-  result.settings = await evaluate(`(async()=>{await lxHost.invoke('common_set_app_setting',{'player.volume':0.42});return lxHost.invoke('common_get_app_setting')})()`)
+  result.settings = await evaluate(`(async()=>{await lxHost.invoke('common_set_app_setting',{'player.volume':0.42,'common.isAgreePact':true,'common.showChangeLog':false});return lxHost.invoke('common_get_app_setting')})()`)
   assert.equal(result.settings['player.volume'], 0.42)
   assert.deepEqual(await evaluate(`lxHost.invoke('player_list_get')`), [])
   const publicKey = generateKeyPairSync('rsa', { modulusLength: 1024 }).publicKey.export({ type: 'spki', format: 'pem' })
-  result.pluginPreferences = await app.evaluate(({ webContents }) => webContents.getAllWebContents().filter(x => x.getURL().includes('/dist/index.html')).map(x => x.getLastWebPreferences()))
+  result.pluginPreferences = await app.evaluate(({ webContents }, suffix) => webContents.getAllWebContents().filter(x => x.getURL().includes(suffix)).map(x => x.getLastWebPreferences()), suffix)
   app.process().stderr.on('data', bytes => { writeFileSync(join(evidence, 'stderr.log'), bytes, { flag: 'a' }) })
   try { result.guest = await evaluate('window.services.probeSourceIsolation()') }
   catch (error) { result.guestFailure = String(error); result.worker = await evaluate(`window.services.probeWorkerIsolation(${JSON.stringify(publicKey)})`) }
@@ -76,7 +77,7 @@ try {
   assert.equal(result.checks.storage.bulk[0].ok, true)
   assert.equal(result.checks.storage.bulk[1].error, true)
   assert.deepEqual(result.checks.localSQLite, { rollback: true, reopen: true })
-  await expect.poll(() => evaluate(`document.body.innerText.includes('原 LX 组件')`)).toBe(true)
+  await expect.poll(() => evaluate(`!!document.querySelector('#container') || document.body.innerText.includes('原 LX 组件')`)).toBe(true)
   const instance = await evaluate(`window.services.startLifecycleProbe()`)
   await evaluate('window.ztools.outPlugin(false)')
   await new Promise(resolve => setTimeout(resolve, 1500))
@@ -92,7 +93,7 @@ try {
   assert.equal(afterDetach.id, instance.id)
   result.lifecycle = { hidden, reentered, detached, afterDetach }
   await evaluate('window.ztools.outPlugin(true)')
-  await expect.poll(() => app.evaluate(({ webContents }) => webContents.getAllWebContents().filter(x => x.getURL().includes('/dist/index.html')).length)).toBe(0)
+  await expect.poll(() => app.evaluate(({ webContents }, suffix) => webContents.getAllWebContents().filter(x => x.getURL().includes(suffix)).length, suffix)).toBe(0)
   result.status = 'PASS'
 } catch (error) {
   if (app) result.webContentsOnFailure = await app.evaluate(({ webContents }) => webContents.getAllWebContents().map(x => ({ type: x.getType(), url: x.getURL(), preferences: x.getLastWebPreferences() }))).catch(() => [])

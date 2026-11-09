@@ -1,21 +1,24 @@
 {
   "name": "lx-music-ztools",
   "version": "0.0.1",
-  "description": "LX Music ZTools native plugin framework",
+  "description": "LX Music native ZTools port with isolated custom sources (development)",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "build": "vue-tsc && vite build && node scripts/build-runtime.mjs && node scripts/build-worker.mjs && node scripts/check.mjs",
+    "dev": "npm run build:runtime && node scripts/build-worker.mjs && webpack --watch --config build-config/ztools/webpack.config.cjs",
+    "dev:diagnostics": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "vue-tsc && vite build && node scripts/build-runtime.mjs && node scripts/build-worker.mjs && node scripts/build-lx.mjs && node scripts/check.mjs",
     "build:ztools": "npm run build",
     "build:runtime": "node scripts/build-runtime.mjs",
     "check:ztools": "vue-tsc && node scripts/check.mjs",
     "test:p0": "node scripts/test-p0.mjs",
+    "test:source": "node scripts/test-source.mjs && node scripts/test-source-ui.mjs",
+    "test:player": "node scripts/test-player.mjs",
     "test:ztools": "node --test tests/ztools/*.test.cjs",
     "check": "node scripts/check.mjs",
     "pack": "npm run build && node scripts/package.mjs",
     "publish:plugin": "node scripts/publish.mjs",
     "test:publish": "node scripts/rehearse-publish.mjs",
-    "test:host": "node scripts/test-host.mjs"
+    "test:host": "node scripts/test-install.mjs"
   },
   "dependencies": {
     "@simonwep/pickr": "^1.9.1",

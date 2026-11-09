@@ -10,12 +10,12 @@
 | 搜索页、基本设置页 | PASS，真实宿主导航及可见区域截图 | `node scripts/test-lx-renderer.mjs`；artifacts/renderer/settings.png |
 | 自定义音源 API 2.0.0 | 已实现隔离执行、初始化、HTTP 回调、同步 crypto/Buffer/zlib、能力与结果校验 | P0 与 source 集成验证 |
 | 导入及使用测试音源 | PASS，导入原始脚本→启用→解析播放 URL；未知音质拒绝；切源取消旧请求 | `node scripts/test-source.mjs`；只使用本地可控脚本/HTTP 服务 |
-| 原界面本地文件/URL 导入操作 | 待完成真实界面流程测试 | 尚未作为 PASS |
+| 原界面本地文件/URL 导入操作 | PASS，两种入口均已通过 | `node scripts/test-source-ui.mjs`；文件选择器返回受控路径，其余为实际 UI、宿主 API 与文件服务 |
 | 用户真实音源/真实平台搜索 | 未提供真实音源，未全量验证外部服务 | 不预置第三方源，不以本地 fixture 结果代替 |
-| 音频解码、实际播放与后台播放 | 待接通并验证 | 能解析 URL 不等于已验证播放 |
+| 音频解码、实际播放与后台播放 | PASS，原 LX 引擎播放受控 WAV，进度、暂停/继续、后台及下一首 | `node scripts/test-player.mjs`；不替代真实平台及人工听音验收 |
 | 排行榜、在线歌单、备份 | 原模块已随上游源码迁入，业务适配/回归待完成 | 不算支持完成 |
 | 下载与续传/标签 | 待完成执行器移植 | 下载记录 SQL 模块可用不等于下载已可用 |
 | LX 同步、开放 API、桌面歌词、快捷键 | 待实现和独立验证 | 不算支持完成 |
-| 可安装最终运行包 | 待完整功能及脱离开发目录验收 | 日常 ZTools 尚未安装此开发版本 |
+| 可安装开发包 | PASS，ZIP 安装后搜索 lxmusic 并打开原界面，无开发服务器 | `node scripts/test-install.mjs`；artifacts/install/report.json；完整功能仍在移植，不能称为最终包 |
 
 验证环境：ZTools app.asar `3.3.0-beta.2` + 独立 Electron `42.3.3`、Chromium `148`、Node `24.15.0`，使用随机临时数据目录。源代码宿主与安装包自带运行时的兼容比较仍需单列，不能把该组合推广为所有 ZTools 版本。

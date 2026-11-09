@@ -36,7 +36,8 @@ function compile(input) {
     writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
     return target
   }
-  const text = ts.transpileModule(readFileSync(input, 'utf8'), { fileName: input, compilerOptions: {
+  const originalSource = readFileSync(input, 'utf8').replace("path.join(os.tmpdir(), 'lxmusic_temp')", 'global.lx.tempDir')
+  const text = ts.transpileModule(originalSource, { fileName: input, compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true, removeComments: false,
   } }).outputText
   const result = text.replace(/require\((['"])([^'"]+)\1\)/g, (match, quote, specifier) => {
@@ -56,5 +57,5 @@ function compile(input) {
   writeFileSync(target, `// Readable LX source adaptation. Upstream 323e4bac; Apache-2.0.\nconst lxRuntimeContext=require(${JSON.stringify(contextModule)});\n${result.replace(/global\.lx\b/g, 'lxRuntimeContext.lx').replaceAll('process.versions.app', JSON.stringify('2.12.6')).replace("console.log('---start---', url);", '')}`)
   return target
 }
-for (const entry of ['main/worker/dbService/modules/index.ts', 'main/worker/dbService/tables.ts', 'main/worker/dbService/migrate.ts', 'common/defaultSetting.ts', 'common/defaultHotKey.ts', 'common/utils/nodejs.ts', 'common/theme/index.json', 'common/ipcNames.ts', 'main/event/index.ts', 'main/modules/commonRenderers/list/rendererEvent.ts', 'main/modules/commonRenderers/list/winRendererEvent.ts', 'main/modules/commonRenderers/dislike/rendererEvent.ts', 'main/modules/commonRenderers/dislike/winRendererEvent.ts', 'main/modules/winMain/rendererEvent/music.ts', 'main/modules/winMain/rendererEvent/download.ts', 'renderer/utils/request.js']) compile(resolve(source, entry))
+for (const entry of ['main/worker/dbService/modules/index.ts', 'main/worker/dbService/tables.ts', 'main/worker/dbService/migrate.ts', 'common/defaultSetting.ts', 'common/defaultHotKey.ts', 'common/utils/nodejs.ts', 'common/theme/index.json', 'common/ipcNames.ts', 'main/event/index.ts', 'main/modules/commonRenderers/list/rendererEvent.ts', 'main/modules/commonRenderers/list/winRendererEvent.ts', 'main/modules/commonRenderers/dislike/rendererEvent.ts', 'main/modules/commonRenderers/dislike/winRendererEvent.ts', 'main/modules/winMain/rendererEvent/music.ts', 'main/modules/winMain/rendererEvent/download.ts', 'renderer/utils/request.js', 'renderer/worker/main/common.ts', 'renderer/worker/main/list.ts', 'renderer/worker/main/music.ts']) compile(resolve(source, entry))
 console.log(`Adapted ${built.size} readable LX runtime modules (no bundling/minification)`)
