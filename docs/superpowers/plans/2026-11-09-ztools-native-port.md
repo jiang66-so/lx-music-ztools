@@ -57,7 +57,7 @@
 
 ## P0：先证明运行前提
 
-### 任务 1：建立最小插件、真实宿主探针和构建入口
+### Task 1: 建立最小插件、真实宿主探针和构建入口
 
 **Files:** 新建 `ztools/plugin.json`、`ztools/package.json`、`ztools/package-lock.json`、`ztools/logo.png`、`ztools/preload.cjs`、`src/ztools/probe.ts`、`build-config/ztools/webpack.config.cjs`、`build-config/ztools/build.cjs`、`build-config/ztools/check.cjs`、`tests/ztools/playwright.config.ts`、`tests/ztools/e2e/host.fixture.ts`、`tests/ztools/e2e/probe.spec.ts`、`docs/ztools/host-capabilities.md`；修改 `package.json`、`package-lock.json`、`.gitignore`。参考 `build-config/renderer/webpack.config.base.js`、`src/renderer/components/base/Btn.vue`。
 
@@ -72,7 +72,7 @@
 
 ## P1：接通宿主和数据
 
-### 任务 2：统一桥接、生命周期和原模块映射
+### Task 2: 统一桥接、生命周期和原模块映射
 
 **Files:** 新建 `src/ztools/contracts.ts`、`src/ztools/entry.ts`、`src/ztools/rendererIpc.ts`、`src/ztools/host.ts`、`src/ztools/worker.ts`、`ztools/runtime/bridge.cjs`、`ztools/runtime/lifecycle.cjs`、`ztools/runtime/settings.cjs`、`tests/ztools/bridge.test.cjs`、`docs/ztools/module-map.md`；修改任务 1 的 preload/构建配置。参考 `src/common/rendererIpc.ts`、`src/renderer/utils/ipc.ts`、`src/renderer/utils/env.js`、`src/renderer/worker/utils/index.ts`、`src/renderer/core/useApp/index.ts`。
 
@@ -84,7 +84,7 @@
 - [ ] 完成 web Worker/Node 能力分类：纯算法保留 Worker，网络/文件/数据库经显式服务；下载工厂保留 `LX.WorkerDownloadTypes` 对外契约，直到任务 8 接入前对应功能显示开发状态而不声称可用。
 - [ ] 运行桥接测试、`npm run build:ztools`、`npm run check:ztools`；记录尚待任务 3—10 接通的业务通道。提交：`feat: add ZTools host bridge and lifecycle`。
 
-### 任务 3：实现可恢复的结构化存储与 LX 数据契约
+### Task 3: 实现可恢复的结构化存储与 LX 数据契约
 
 **Files:** 新建 `ztools/runtime/storage/adapter.cjs`、`ztools/runtime/storage/snapshots.cjs`、`ztools/runtime/storage/lists.cjs`、`ztools/runtime/storage/records.cjs`、`tests/ztools/storage.test.cjs`、`tests/ztools/list-contract.test.cjs`、`tests/ztools/e2e/storage.spec.ts`；修改 `ztools/runtime/settings.cjs`、`src/ztools/contracts.ts`、`ztools/runtime/bridge.cjs`。参考 `src/main/worker/dbService/modules/list/index.ts` 及同目录六个数据模块。
 
@@ -98,7 +98,7 @@
 
 ## P2：打通音源与播放
 
-### 任务 4：迁移网络与音乐平台适配
+### Task 4: 迁移网络与音乐平台适配
 
 **Files:** 新建 `ztools/runtime/network.cjs`、`src/ztools/request.ts`、`tests/ztools/network.test.cjs`、`tests/ztools/fixtures/http-server.cjs`、`tests/ztools/e2e/catalog.spec.ts`；修改 `src/ztools/contracts.ts`、构建别名与 `docs/ztools/module-map.md`。参考 `src/renderer/utils/request.js`、`src/renderer/utils/musicSdk`、`src/renderer/worker/main/music.ts`。
 
@@ -109,7 +109,7 @@
 - [ ] 接通搜索、分页、热搜/建议与平台切换；fixture 注入只在测试配置生效。为 kw/kg/tx/wy/mg 分别断言转换后的 ID/hash/albumId/音质字段，与原转换结果一致；单平台失败有明确提示且其他平台仍可用。
 - [ ] 运行网络测试、`npm run test:ztools:e2e -- --grep catalog`、构建检查。真实平台连通另记 LIVE 结果，不以网络 fixture 通过冒充。提交：`feat: adapt LX network and music catalog`。
 
-### 任务 5：导入、隔离执行和切换自定义音源
+### Task 5: 导入、隔离执行和切换自定义音源
 
 **Files:** 新建 `ztools/runtime/source/manager.cjs`、`ztools/runtime/source/protocol.cjs`、`ztools/runtime/source/runtime.cjs`、`ztools/runtime/source/guest-preload.cjs`、`ztools/runtime/source/guest.html`、`tests/ztools/source-contract.test.cjs`、`tests/ztools/fixtures/source-api-v2.js`、`tests/ztools/e2e/source.spec.ts`；修改契约、桥接与音源设置页中必须调整的宿主调用。若 P0 选择 Worker，用 `src/ztools/source.worker.ts` 替换两个 guest 文件，并在映射中固定该选择。
 
@@ -121,7 +121,7 @@
 - [ ] 添加切换测试：A 请求挂起时启用 B，A 的成功/失败/初始化迟到消息均不能改变 B；旧网络取消，删除当前源后明确进入无源状态；request 返回值、音质与 URL 校验失败有准确错误。
 - [ ] 运行 `node --test tests/ztools/source-contract.test.cjs`、`npm run test:ztools:e2e -- --grep source` 和构建检查。记录标准 API 兼容证据及 DOM 扩展脚本限制；用户真实音源未提供时明确待验证。提交：`feat: support isolated LX custom sources`。
 
-### 任务 6：恢复原播放器、列表与后台体验
+### Task 6: 恢复原播放器、列表与后台体验
 
 **Files:** 新建 `src/ztools/player.ts`、`src/ztools/theme.ts`、`src/ztools/workerServices.ts`、`tests/ztools/e2e/player.spec.ts`；修改 `src/ztools/entry.ts`、`src/ztools/worker.ts`、桥接；按映射最小修改 `src/renderer/core/useApp/index.ts`、`src/renderer/core/useApp/usePlayer/index.ts`、`src/renderer/core/useApp/useEventListener.ts`。参考原 App/router、player、store/list、本地音乐与音效模块。
 
@@ -135,7 +135,7 @@
 
 ## P3：补全业务与下载
 
-### 任务 7：排行榜、在线歌单、备份及完整设置
+### Task 7: 排行榜、在线歌单、备份及完整设置
 
 **Files:** 新建 `ztools/runtime/backup.cjs`、`tests/ztools/backup.test.cjs`、`tests/ztools/e2e/library.spec.ts`；修改桥接与必要的 `src/renderer/views/Setting/components/SettingBackup.vue` 宿主调用。参考 `src/renderer/router.ts`、musicSdk 的榜单/歌单实现及现有设置组件。
 
@@ -146,7 +146,7 @@
 - [ ] 实现备份和设置契约，覆盖列表/设置分别备份、全部备份、txt/csv 导出；对设置项逐条映射“有效/由宿主管理/有说明的限制”，禁用无效开关并解释，不删除核心功能以规避适配。
 - [ ] 运行 backup 测试、`npm run test:ztools:e2e -- --grep library`、构建检查，保存兼容矩阵初稿 `docs/ztools/compatibility.md`。提交：`feat: restore playlists charts and LX backups`。
 
-### 任务 8：迁移下载执行器、续传与标签
+### Task 8: 迁移下载执行器、续传与标签
 
 **Files:** 新建 `ztools/runtime/download/queue.cjs`、`ztools/runtime/download/transfer.cjs`、`ztools/runtime/download/metadata.cjs`、`tests/ztools/download.test.cjs`、`tests/ztools/e2e/download.spec.ts`；修改 `src/ztools/worker.ts`、契约、桥接。参考 `src/renderer/worker/download`、`src/common/utils/download`，按原模块映射保留命名及歌词封面行为。
 
@@ -160,7 +160,7 @@
 
 ## P4：同步和系统集成
 
-### 任务 9：保留 LX 同步客户端与服务端
+### Task 9: 保留 LX 同步客户端与服务端
 
 **Files:** 新建 `ztools/runtime/sync/index.cjs`、`ztools/runtime/sync/events.cjs`、`ztools/runtime/sync/storage.cjs`、`tests/ztools/sync.test.cjs`、`tests/ztools/e2e/sync.spec.ts`、`tests/ztools/fixtures/lx-sync-peer.cjs`；按 `docs/ztools/module-map.md` 将 `src/main/modules/sync/client`、`server`、`utils.ts`、`migrate.ts` 逐模块适配到 `ztools/runtime/sync/` 同名可读 CJS，更新契约和桥接。不把 Electron 主入口一起复制。
 
@@ -172,7 +172,7 @@
 - [ ] 验证默认不监听、设置开启才监听，端口冲突明确报错、隐藏维持连接、kill 释放监听。缺少真实对端条件时记 BLOCKED，不能以两个插件副本互通替代。
 - [ ] 运行 sync 单元/E2E及构建检查，把对端版本和最终双方数据摘要写入兼容矩阵。提交：`feat: preserve LX sync client and server protocol`。
 
-### 任务 10：开放 API、快捷键及桌面歌词
+### Task 10: 开放 API、快捷键及桌面歌词
 
 **Files:** 新建 `ztools/runtime/open-api.cjs`、`ztools/runtime/windows.cjs`、`src/ztools/lyric-entry.ts`、`tests/ztools/open-api.test.cjs`、`tests/ztools/e2e/system.spec.ts`；修改 plugin.json、桥接、构建配置；参考 `src/main/modules/openApi/index.ts`、`src/main/modules/winLyric`、`src/renderer-lyric`、`src/main/modules/hotKey`。
 
@@ -186,7 +186,7 @@
 
 ## P5：形成可安装交付物
 
-### 任务 11：独立运行包、完整回归和中文文档
+### Task 11: 独立运行包、完整回归和中文文档
 
 **Files:** 新建 `build-config/ztools/package.cjs`、`tests/ztools/package.test.cjs`、`tests/ztools/e2e/acceptance.spec.ts`、`docs/ztools/README.md`、`docs/ztools/upstream-diff.md`；更新 runtime 锁文件、`docs/ztools/host-capabilities.md`、`docs/ztools/compatibility.md`、构建检查与 scripts。保留并组装 `LICENSE`、第三方 notices。
 

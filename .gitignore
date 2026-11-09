@@ -1,4 +1,5 @@
 node_modules/
+src-ztools/preload/upstream/
 src-ztools/dist/
 artifacts/
 test-results/

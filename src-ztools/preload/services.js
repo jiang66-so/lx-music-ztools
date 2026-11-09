@@ -1,8 +1,15 @@
 const PREFIX = 'lx-music:framework:'
 const probes = require('./probes.cjs')
 const { randomUUID } = require('node:crypto')
+const { createBridge } = require('./runtime/bridge.cjs')
+const { createLifecycle } = require('./runtime/lifecycle.cjs')
+const { initializeRuntime } = require('./runtime/index.cjs')
+const bridge = createBridge()
+const runtime = initializeRuntime({ bridge, directory: window.ztools.getPath('pluginData') })
+window.lxHost = Object.fromEntries(['invoke', 'send', 'readSnapshot', 'on', 'once', 'off', 'offAll', 'subscribe'].map(key => [key, bridge[key]]))
 let lifecycleProbe
 window.services = {
+  subscribe(channel, listener) { return bridge.subscribe(channel, listener) },
   startLifecycleProbe() {
     if (!lifecycleProbe) {
       lifecycleProbe = { id: randomUUID(), ticks: 0 }
@@ -32,3 +39,14 @@ window.services = {
     finally { window.ztools.dbStorage.removeItem(key) }
   }
 }
+const lifecycle = createLifecycle({
+  initialize: async () => {},
+  onEnter: action => { window.services.recordLaunch(); bridge.emit('lifecycle:enter', action) },
+  onHide: () => bridge.emit('lifecycle:hide'),
+  onDetach: () => bridge.emit('lifecycle:detach'),
+  dispose: async () => { await runtime.dispose(); await bridge.dispose() },
+})
+const report = error => bridge.emit('bridge:error', { code: error.code, message: error.message })
+window.ztools.onPluginEnter(action => { void lifecycle.enter(action).catch(report) })
+window.ztools.onPluginOut(isKill => { void lifecycle.out(isKill).catch(report) })
+window.ztools.onPluginDetach(() => { void lifecycle.detach().catch(report) })

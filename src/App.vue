@@ -24,12 +24,12 @@ function checkStorage() {
 onMounted(() => {
   diagnose()
   if (!available) return
-  window.ztools.onPluginEnter((action) => {
+  window.services.subscribe('lifecycle:enter', (action) => {
     feature.value = action.code || '打开插件'
-    count.value = window.services.recordLaunch()
+    count.value = window.services.getLaunchCount()
     message.value = '插件进入事件已接收'
   })
-  window.ztools.onPluginOut((isKill) => { message.value = isKill ? '插件终止' : '插件已转入后台' })
+  window.services.subscribe('lifecycle:hide', () => { message.value = '插件已转入后台' })
 })
 </script>
 <template>
