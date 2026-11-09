@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "build": "vue-tsc && vite build && node scripts/check.mjs",
+    "build": "vue-tsc && vite build && node scripts/build-worker.mjs && node scripts/check.mjs",
+    "build:ztools": "npm run build",
+    "check:ztools": "vue-tsc && node scripts/check.mjs",
+    "test:p0": "node scripts/test-p0.mjs",
+    "test:ztools": "node --test tests/ztools/*.test.cjs",
     "check": "node scripts/check.mjs",
     "pack": "npm run build && node scripts/package.mjs",
     "publish:plugin": "node scripts/publish.mjs",
@@ -13,16 +17,24 @@
     "test:host": "node scripts/test-host.mjs"
   },
   "dependencies": {
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "events": "^3.3.0",
+    "pako": "^3.0.3",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
+    "@playwright/test": "1.58.2",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@ztools-center/plugin-cli": "1.3.2",
     "@ztools-center/ztools-api-types": "^1.0.1",
+    "esbuild": "^0.25.12",
+    "less": "^4.9.1",
     "typescript": "^5.3.0",
     "vite": "^6.0.11",
-    "vue-tsc": "^2.0.0",
-    "@ztools-center/plugin-cli": "1.3.2",
-    "@playwright/test": "1.58.2",
-    "@electron/asar": "3.4.1"
+    "vue-tsc": "^2.0.0"
   }
 }

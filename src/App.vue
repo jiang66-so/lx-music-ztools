@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import LxButton from '../vendor/lx/src/renderer/components/base/Btn.vue'
 const host = ref('等待连接 ZTools')
 const feature = ref('未触发')
 const count = ref(0)
@@ -36,7 +37,7 @@ onMounted(() => {
     <header><img src="../src-ztools/logo.png" alt="LX Music" /><div><p class="eyebrow">ZTOOLS PLUGIN · 0.0.1</p><h1>LX Music</h1></div><span class="tag">框架验证版</span></header>
     <p class="intro">插件运行环境与发布链路验证。音乐功能将在后续移植中接入。</p>
     <dl><div><dt>宿主环境</dt><dd data-testid="host">{{ host }}</dd></div><div><dt>触发指令</dt><dd data-testid="feature">{{ feature }}</dd></div><div><dt>累计进入</dt><dd data-testid="count">{{ count }}</dd></div></dl>
-    <div class="actions"><button @click="diagnose">检查运行环境</button><button :disabled="!available" @click="checkStorage">验证插件存储</button></div>
+    <div class="actions"><LxButton @click="diagnose">原 LX 组件 · 检查环境</LxButton><button :disabled="!available" @click="checkStorage">验证插件存储</button></div>
     <p role="status">{{ message }}</p><footer>输入「LX Music」或「洛雪音乐」打开插件</footer>
   </main>
 </template>
