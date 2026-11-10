@@ -55,6 +55,15 @@ function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
     await send(lyric.on_config_change, getConfig(lx), target)
   }
   const changed = keys => { if (!reconcilingBounds && keys.some(isConfig)) void serial(apply) }
+  const updateBoundsConfig = rectangle => {
+    reconcilingBounds = true
+    try {
+      lx.event_app.update_config({
+        'desktopLyric.x': rectangle.x, 'desktopLyric.y': rectangle.y,
+        'desktopLyric.width': rectangle.width, 'desktopLyric.height': rectangle.height,
+      })
+    } finally { reconcilingBounds = false }
+  }
   const inited = () => { ready = true; void serial(apply) }
   lx.event_app.on('updated_config', changed); lx.event_app.on('main_window_inited', inited)
   const allowed = new Set([lyric.get_config, lyric.set_config, lyric.set_win_bounds, lyric.mouse_enter_leave, lyric.request_main_window_channel, 'lyric:port'])
@@ -67,21 +76,19 @@ function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
         lx.event_app.update_config(params); await lastOperation; return
       }
       case lyric.set_win_bounds: {
-        if (!current || !params || ['x', 'y', 'w', 'h'].some(key => !Number.isFinite(params[key]))) throw new Error('无效歌词窗口尺寸')
-        const target = current, before = await call(target.window, 'getBounds')
-        const next = bounds(lx.appSetting, { x: before.x + params.x, y: before.y + params.y, width: Math.max(38, params.w), height: Math.max(38, params.h) })
-        lx.event_app.update_config({ 'desktopLyric.x': next.x, 'desktopLyric.y': next.y, 'desktopLyric.width': next.width, 'desktopLyric.height': next.height })
-        const operation = lastOperation
-        try { await operation } catch (error) {
-          let actual
-          try { actual = await call(target.window, 'getBounds') } catch { actual = before }
-          reconcilingBounds = true
-          try {
-            lx.event_app.update_config({ 'desktopLyric.x': actual.x, 'desktopLyric.y': actual.y, 'desktopLyric.width': actual.width, 'desktopLyric.height': actual.height })
-          } finally { reconcilingBounds = false }
-          throw error
-        }
-        return
+        if (!params || ['x', 'y', 'w', 'h'].some(key => !Number.isFinite(params[key]))) throw new Error('无效歌词窗口尺寸')
+        return serial(async () => {
+          if (!current) throw new Error('无效歌词窗口尺寸')
+          const target = current, before = await call(target.window, 'getBounds')
+          const next = bounds(lx.appSetting, { x: before.x + params.x, y: before.y + params.y, width: Math.max(38, params.w), height: Math.max(38, params.h) })
+          updateBoundsConfig(next)
+          try { await apply() } catch (error) {
+            let actual
+            try { actual = await call(target.window, 'getBounds') } catch { actual = before }
+            updateBoundsConfig(actual)
+            throw error
+          }
+        })
       }
       case lyric.mouse_enter_leave: return send(lyric.mouse_enter_leave, Boolean(params))
       case lyric.request_main_window_channel:

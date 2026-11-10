@@ -92,3 +92,41 @@ test('resize RPC reports host bounds errors, reconciles actual bounds, and keeps
     })
   }
 })
+test('an older failed resize cannot overwrite a newer successful resize', async t => {
+  const x = fixture(t)
+  await x.service.openLyrics()
+  const win = x.windows[0], session = new URL(win.url, 'file:///').searchParams.get('session')
+  const originalGetBounds = win.getBounds.bind(win), staleBounds = { ...originalGetBounds() }
+  let reads = 0, attempts = 0
+  win.getBounds = () => {
+    reads++
+    if (reads === 3) return new Promise(resolve => setImmediate(() => resolve(staleBounds)))
+    return originalGetBounds()
+  }
+  win.setBounds = next => {
+    attempts++
+    if (attempts === 1) return Promise.reject(new Error('first resize failed'))
+    win.bounds = next
+  }
+  const sendInvoke = (id, width) => x.ipcRenderer.emit(PARENT, { senderId: 42 }, {
+    session, kind: 'invoke', id, channel: names.set_win_bounds, params: { x: 0, y: 0, w: width, h: 120 },
+  })
+
+  sendInvoke('resize-old-failure', 600)
+  sendInvoke('resize-new-success', 700)
+  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setImmediate(resolve))
+
+  const replies = new Map(x.calls.map(call => call[1]).filter(packet => packet?.id).map(packet => [packet.id, packet]))
+  assert.match(replies.get('resize-old-failure')?.error, /first resize failed/)
+  assert.equal(replies.get('resize-new-success')?.error, undefined)
+  assert.equal(win.bounds.width, 700)
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 700)
+
+  sendInvoke('resize-after-overlap', 800)
+  await new Promise(resolve => setImmediate(resolve))
+  const laterReply = x.calls.map(call => call[1]).find(packet => packet?.id === 'resize-after-overlap')
+  assert.equal(laterReply.error, undefined)
+  assert.equal(win.bounds.width, 800)
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 800)
+})
