@@ -10,7 +10,8 @@ function createSync({ bridge = context.bridge } = {}) {
   // which binds window close to disconnect (plugin hiding must retain sync).
   const original = require('../../upstream/main/modules/sync/index.cjs')
   const users = require('../../upstream/main/modules/sync/server/user/index.cjs')
-  let mode = 'server', queue = Promise.resolve(), disposed = false
+  const { cancelPendingConnect } = require('../../upstream/main/modules/sync/client/index.cjs')
+  let mode = 'server', queue = Promise.resolve(), disposed = false, closing = false, disposal, generation = 0
   const listeners = new Set()
   const clone = value => structuredClone(value)
   const getStatus = () => ({ mode, ...clone(mode === 'server' ? original.getServerStatus() : original.getClientStatus()) })
@@ -24,6 +25,12 @@ function createSync({ bridge = context.bridge } = {}) {
     queue = result.catch(() => {})
     return result
   }
+  const interrupt = () => {
+    generation++
+    cancelPendingConnect()
+    cancelRequests()
+    return generation
+  }
   const stopNow = async () => {
     cancelRequests()
     win.removeSelectModeListener(); win.sendCloseSelectMode()
@@ -32,35 +39,41 @@ function createSync({ bridge = context.bridge } = {}) {
     users.releaseUserSpace('default', true)
     await storage.flush()
   }
-  const start = config => serial(async () => {
-    if (disposed) throw new Error('同步服务已终止')
-    if (!config || !['server', 'client'].includes(config.mode)) throw new Error('Invalid sync mode')
-    if (config.enable === false) { await stopNow(); return getStatus() }
-    let port
-    if (config.mode === 'server') {
-      if (!/^[0-9]+$/.test(String(config.port))) throw new Error('Invalid sync port / 端口无效')
-      port = Number(config.port)
-      if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid sync port / 端口无效')
-    } else {
-      const url = new URL(config.host)
-      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) sync hosts are supported')
-    }
-    await stopNow(); mode = config.mode
-    try {
-      if (mode === 'server') {
-        await original.startServer(port)
-        if (!original.getServerStatus().status) throw new Error(original.getServerStatus().message || '同步服务启动失败')
-      } else await original.connectServer(config.host, config.authCode)
-    } catch (error) {
-      await stopNow()
-      const status = mode === 'server' ? original.getServerStatus() : original.getClientStatus()
-      status.message = error.message
-      bridge.emit(names.sync_action, { action: `${mode}_status`, data: clone(status) })
-      throw error
-    }
-    return getStatus()
-  })
-  const stop = () => serial(async () => { await stopNow(); return getStatus() })
+  const start = config => {
+    const id = interrupt()
+    return serial(async () => {
+      if (disposed || closing) throw new Error('同步服务已终止')
+      if (id !== generation) return getStatus()
+      if (!config || !['server', 'client'].includes(config.mode)) throw new Error('Invalid sync mode')
+      if (config.enable === false) { await stopNow(); return getStatus() }
+      let port
+      if (config.mode === 'server') {
+        if (!/^[0-9]+$/.test(String(config.port))) throw new Error('Invalid sync port / 端口无效')
+        port = Number(config.port)
+        if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid sync port / 端口无效')
+      } else {
+        const url = new URL(config.host)
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) sync hosts are supported')
+      }
+      await stopNow(); mode = config.mode
+      try {
+        if (mode === 'server') {
+          await original.startServer(port)
+          if (!original.getServerStatus().status) throw new Error(original.getServerStatus().message || '同步服务启动失败')
+        } else await original.connectServer(config.host, config.authCode)
+        if (id !== generation) { await stopNow(); return getStatus() }
+      } catch (error) {
+        await stopNow()
+        if (id !== generation) return getStatus()
+        const status = mode === 'server' ? original.getServerStatus() : original.getClientStatus()
+        status.message = error.message
+        bridge.emit(names.sync_action, { action: `${mode}_status`, data: clone(status) })
+        throw error
+      }
+      return getStatus()
+    })
+  }
+  const stop = () => { interrupt(); return serial(async () => { await stopNow(); return getStatus() }) }
   const action = async ({ action, data }) => {
     switch (action) {
       case 'enable_server': return start({ mode: 'server', ...data })
@@ -73,10 +86,19 @@ function createSync({ bridge = context.bridge } = {}) {
     }
   }
   return { start, stop, getStatus, action,
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
+    subscribe(listener) { if (closing || disposed) return () => {}; listeners.add(listener); return () => listeners.delete(listener) },
     devices: () => original.getServerDevices().then(clone),
     removeDevice: clientId => original.removeServerDevice(clientId),
-    async dispose() { if (disposed) return; disposed = true; await stop(); off(); listeners.clear() },
+    dispose() {
+      if (disposed) return Promise.resolve()
+      if (disposal) return disposal
+      closing = true; interrupt()
+      disposal = serial(async () => {
+        try { await stopNow(); disposed = true }
+        finally { off(); listeners.clear() }
+      }).catch(error => { disposal = null; throw error })
+      return disposal
+    },
   }
 }
 module.exports = { createSync }

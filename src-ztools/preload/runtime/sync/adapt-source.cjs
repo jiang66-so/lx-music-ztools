@@ -15,16 +15,27 @@ function adaptSyncSource(relativePath, source) {
   }
   if (file.endsWith('/snapshotDataManage.ts')) {
     patch('  clearOldSnapshot = async() => {', '  clearOldSnapshot = serial(async() => {', 'serialize snapshot maintenance')
-    patch('  }\n\n  updateDeviceSnapshotKey', '  })\n\n  updateDeviceSnapshotKey', 'close serialized snapshot maintenance')
+    patch('  }\n\n  updateDeviceSnapshotKey', '  }, () => this)\n\n  updateDeviceSnapshotKey', 'share snapshot manager critical section')
+    patch('this.snapshotInfo.list.filter(key => !this.isIncluedsDevice(key))', 'this.snapshotInfo.list.filter(key => key !== this.snapshotInfo.latest && !this.isIncluedsDevice(key))', 'protect latest during pruning')
+    patch(`      if (name) {
+        await this.removeSnapshot(name)
+        this.snapshotInfo.list.splice(this.snapshotInfo.list.indexOf(name), 1)`, `      if (name) {
+        if (name === this.snapshotInfo.latest || this.isIncluedsDevice(name)) continue
+        await this.removeSnapshot(name)
+        const index = this.snapshotInfo.list.indexOf(name)
+        if (index >= 0) this.snapshotInfo.list.splice(index, 1)`, 'recheck protection and valid history index')
   }
   if (file.endsWith('/server/modules/list/manage.ts') || file.endsWith('/server/modules/dislike/manage.ts')) {
     source = "import { serial } from '@ztools/sync/storage'\n" + source
     patch('  createSnapshot = async() => {', '  createSnapshot = serial(async() => {', 'serialize snapshot creation')
-    patch('  }\n\n  getCurrentListInfoKey', '  })\n\n  getCurrentListInfoKey', 'close serialized snapshot creation')
+    patch('  }\n\n  getCurrentListInfoKey', '  }, () => this.snapshotDataManage)\n\n  getCurrentListInfoKey', 'share snapshot creation critical section')
   }
   if (file.endsWith('/client/data.ts')) {
     patch('    void saveSyncAuthKeys()', '    await saveSyncAuthKeys()', 'persist initial auth state')
     patch('  void saveSyncAuthKeys()', '  await saveSyncAuthKeys()', 'persist updated auth state')
+  }
+  if (file === 'main/modules/sync/client/index.ts') {
+    patch('let connectId = 0', 'let connectId = 0\nexport const cancelPendingConnect = () => { connectId++ }', 'invalidate pending authentication before queued stop')
   }
   if (file.endsWith('/client/auth.ts')) {
     patch("  console.log('connect: ', urlInfo.href, authCode)", "  // Credentials never enter host logs.", 'redact authentication code')

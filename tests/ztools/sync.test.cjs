@@ -71,6 +71,9 @@ test('sync storage flush persists the latest throttled state and propagates writ
   assert.equal(fs.readFileSync(file, 'utf8'), 'latest')
   writeFile(join(directory, 'missing', 'devices.json'), '{}', () => {})
   await assert.rejects(flush(), /认证数据保存失败/)
+  fs.mkdirSync(join(directory, 'missing'))
+  await flush()
+  assert.equal(fs.readFileSync(join(directory, 'missing', 'devices.json'), 'utf8'), '{}')
 })
 
 test('sync host patches reject upstream source drift and retain wire/merge modules byte-for-byte', () => {
@@ -91,9 +94,9 @@ test('concurrent snapshot pruning retains protected device snapshots and flush d
   context.lx = { appSetting: { 'sync.server.maxSsnapshotNum': 1 } }
   const { SnapshotDataManage } = require('../../src-ztools/preload/upstream/main/modules/sync/server/modules/list/snapshotDataManage.cjs')
   const manager = new SnapshotDataManage({ userDir: mkdtempSync(join(tmpdir(), 'lx-sync-prune-')), userName: 'default' })
-  manager.snapshotInfo = { latest: 'a', time: 0, list: ['a', 'b', 'protected'], clients: { device: { snapshotKey: 'protected', lastSyncDate: 0 } } }
+  manager.snapshotInfo = { latest: 'current', time: 0, list: ['a', 'b', 'protected'], clients: { device: { snapshotKey: 'protected', lastSyncDate: 0 } } }
   manager.clientSnapshotKeys = ['protected']
-  for (const name of ['a', 'b', 'protected']) fs.writeFileSync(join(manager.snapshotDir, 'snapshot_' + name), '{}')
+  for (const name of ['a', 'b', 'protected', 'current']) fs.writeFileSync(join(manager.snapshotDir, 'snapshot_' + name), '{}')
   try {
     await Promise.all([manager.clearOldSnapshot(), manager.clearOldSnapshot()])
     await storage.flush()
@@ -141,4 +144,97 @@ test('terminating the production runtime process releases its sync listener', { 
   const exited = once(child, 'exit'); child.kill(); await exited
   reservation.listen(port, '0.0.0.0'); await once(reservation, 'listening')
   await new Promise(resolve => reservation.close(resolve))
+})
+
+for (const kind of ['list', 'dislike']) test(`${kind} snapshot promotion shares the pruning critical section and never points latest at an unlinked file`, { timeout: 5000 }, async () => {
+  const fs = require('node:fs')
+  const { createHash } = require('node:crypto')
+  const context = require('../../src-ztools/preload/runtime/context.cjs')
+  const storage = require('../../src-ztools/preload/runtime/sync/storage.cjs')
+  const directory = mkdtempSync(join(tmpdir(), 'lx-sync-promote-prune-'))
+  const runtime = initializeRuntime({ bridge: createBridge(), directory })
+  const Manager = require(`../../src-ztools/preload/upstream/main/modules/sync/server/modules/${kind}/manage.cjs`)[kind === 'list' ? 'ListManage' : 'DislikeManage']
+  context.lx.appSetting['sync.server.maxSsnapshotNum'] = 10
+  const manager = new Manager({ userDir: directory, userName: 'default' })
+  const snapshots = manager.snapshotDataManage
+  const data = kind === 'list' ? JSON.stringify(await manager.getListData()) : await manager.getDislikeRules()
+  const restoredKey = createHash('md5').update(data).digest('hex')
+  const history = [...Array.from({ length: 10 }, (_, i) => 'history-' + i), restoredKey]
+  snapshots.snapshotInfo = { latest: 'previous-latest', time: 0, list: history, clients: {} }
+  for (const key of [...history, 'previous-latest']) fs.writeFileSync(join(snapshots.snapshotDir, 'snapshot_' + key), key === restoredKey ? data : '{}')
+  let entered, release
+  const removing = new Promise(resolve => { entered = resolve })
+  const barrier = new Promise(resolve => { release = resolve })
+  const remove = snapshots.removeSnapshot
+  snapshots.removeSnapshot = async key => { if (key === restoredKey) { entered(); await barrier } return remove(key) }
+  try {
+    const pruning = snapshots.clearOldSnapshot()
+    await removing
+    const promotion = manager.createSnapshot()
+    await new Promise(resolve => setImmediate(resolve))
+    release()
+    const [, createdKey] = await Promise.all([pruning, promotion])
+    await storage.flush()
+    assert.equal(createdKey, restoredKey)
+    assert.equal(snapshots.snapshotInfo.latest, restoredKey)
+    assert.equal(fs.existsSync(join(snapshots.snapshotDir, 'snapshot_' + restoredKey)), true, 'latest must reference a real snapshot after prune/promotion interleaving')
+    assert.equal(fs.readFileSync(join(snapshots.snapshotDir, 'snapshot_' + restoredKey), 'utf8'), data)
+    assert.ok(snapshots.snapshotInfo.list.includes('history-8'), 'the old splice(-1) path must not remove an unrelated retained history')
+  } finally { release(); await runtime.dispose() }
+})
+
+for (const change of ['stop', 'reconfigure', 'dispose']) test(`${change} cancels pending authentication before joining the lifecycle queue`, { timeout: 10000 }, async () => {
+  const sockets = new Set()
+  const server = http.createServer(() => {})
+  server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)) })
+  server.listen(0, '127.0.0.1'); await once(server, 'listening')
+  const runtime = initializeRuntime({ bridge: createBridge(), directory: mkdtempSync(join(tmpdir(), 'lx-sync-cancel-')) })
+  const { sync } = runtime
+  const requested = once(server, 'request')
+  const starting = sync.start({ mode: 'client', host: `http://127.0.0.1:${server.address().port}` }).then(() => null, error => error)
+  await requested
+  let port
+  if (change === 'reconfigure') {
+    const reservation = http.createServer(); reservation.listen(0, '0.0.0.0'); await once(reservation, 'listening')
+    port = reservation.address().port; await new Promise(resolve => reservation.close(resolve))
+  }
+  const operation = change === 'reconfigure' ? sync.start({ mode: 'server', port }) : sync[change]()
+  let timely
+  try {
+    timely = await Promise.race([operation.then(() => true), new Promise(resolve => setTimeout(() => resolve(false), 150))])
+    if (timely && change === 'reconfigure') assert.equal(await (await fetch(`http://127.0.0.1:${port}/hello`)).text(), 'Hello~::^-^::~v4~')
+  } finally {
+    for (const socket of sockets) socket.destroy()
+    await starting; await operation
+    await runtime.dispose(); await new Promise(resolve => server.close(resolve))
+  }
+  assert.equal(timely, true, `${change} must cancel authentication without waiting for its 10 second timeout`)
+})
+
+test('dispose always removes subscriptions after flush failure and retries the unsaved write', async () => {
+  const fs = require('node:fs')
+  const storage = require('../../src-ztools/preload/runtime/sync/storage.cjs')
+  const { WIN_MAIN_RENDERER_EVENT_NAME: names } = require('../../src-ztools/preload/upstream/common/ipcNames.cjs')
+  const directory = mkdtempSync(join(tmpdir(), 'lx-sync-dispose-failed-'))
+  const bridge = createBridge()
+  const runtime = initializeRuntime({ bridge, directory })
+  let notifications = 0
+  runtime.sync.subscribe(() => { notifications++ })
+  const target = join(directory, 'missing', 'devices.json')
+  storage.writeFile(target, '{"retry":"latest-state"}', () => {})
+  try {
+    const disposing = runtime.sync.dispose()
+    assert.equal(runtime.sync.dispose(), disposing, 'concurrent disposal must share the same settlement')
+    await assert.rejects(disposing, /认证数据保存失败/)
+    notifications = 0
+    bridge.emit(names.sync_action, { action: 'server_status', data: { status: false, message: '' } })
+    const leaked = notifications
+    fs.mkdirSync(join(directory, 'missing'))
+    await runtime.sync.dispose()
+    assert.equal(leaked, 0, 'flush failure must still detach the bridge listener and subscribers')
+    assert.equal(fs.readFileSync(target, 'utf8'), '{"retry":"latest-state"}', 'retry must persist the original failed write before reporting disposal success')
+  } finally {
+    fs.mkdirSync(join(directory, 'missing'), { recursive: true })
+    await storage.flush(); await runtime.dispose()
+  }
 })
