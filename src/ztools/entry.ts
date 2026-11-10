@@ -7,7 +7,9 @@ void Promise.resolve().then(async () => {
   ;(window as any).shouldUseDarkColors = window.ztools.isDarkColors()
   document.documentElement.classList.remove('transparent')
   document.documentElement.classList.add('disableTransparent')
-  if (!(window as any).dom_style.isConnected) document.head.appendChild((window as any).dom_style)
+  // LX's lazily loaded styles define fallback :root colors in <head>.
+  // Keep its active theme after those styles in document order.
+  if (!(window as any).dom_style.isConnected) document.body.appendChild((window as any).dom_style)
   await import('../../vendor/lx/src/renderer/main')
   await import('./theme.js')
   await import('./player.js')

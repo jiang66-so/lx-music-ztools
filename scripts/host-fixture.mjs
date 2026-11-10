@@ -17,12 +17,15 @@ export async function startHost(entry, { zip = process.env.ZTOOLS_PLUGIN_ZIP } =
   const data = mkdtempSync(join(tmpdir(), 'lx-ztools-host-'))
   mkdirSync(join(data, 'legacy'))
   const plugin = join(data, 'plugin')
-  copyDirectory(resolve('src-ztools'), plugin)
-  const manifest = JSON.parse(readFileSync(join(plugin, 'plugin.json'), 'utf8'))
-  delete manifest.development
-  if (entry) manifest.main = entry
-  entry = manifest.main
-  writeFileSync(join(plugin, 'plugin.json'), JSON.stringify(manifest))
+  if (zip) entry ||= 'dist/lx.html'
+  else {
+    copyDirectory(resolve('src-ztools'), plugin)
+    const manifest = JSON.parse(readFileSync(join(plugin, 'plugin.json'), 'utf8'))
+    delete manifest.development
+    if (entry) manifest.main = entry
+    entry = manifest.main
+    writeFileSync(join(plugin, 'plugin.json'), JSON.stringify(manifest))
+  }
   const app = await electron.launch({ executablePath: process.env.ZTOOLS_EXECUTABLE || resolve('../tmp/lx-electron-42/electron.exe'),
     args: [process.env.ZTOOLS_APP || 'D:/Program Files/ZTools/resources/app.asar'],
     env: { ...process.env, ZTOOLS_DATA_ROOT: data, ZTOOLS_LEGACY_USER_DATA_PATH: join(data, 'legacy'), ZTOOLS_E2E: '1' }, timeout: 45000 })

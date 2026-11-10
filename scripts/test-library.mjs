@@ -1,6 +1,6 @@
 import { startHost } from './host-fixture.mjs'
 import { expect } from '@playwright/test'
-import { createCipheriv } from 'node:crypto'
+import { createCipheriv, createDecipheriv } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -75,7 +75,18 @@ try {
     await invoke('backup:exportText', { path: file, format, merge: true })
     assert.ok(readFileSync(file, 'utf8').includes('歌单歌曲65'))
   }
-  report.status = 'PASS'; report.boardCount = board.length; report.playlistCount = playlist.length; report.requests = await host.evaluate('__libraryRequests')
+  report.requests = await host.evaluate('__libraryRequests')
+  const chartRequests = report.requests.filter(url => url.includes('bang_info')).map(url => {
+    const encrypted = Buffer.from(new URL(url).searchParams.get('data'), 'base64')
+    const aes = createDecipheriv('aes-128-ecb', key, null)
+    return JSON.parse(Buffer.concat([aes.update(encrypted), aes.final()]).toString())
+  })
+  assert.deepEqual(chartRequests.map(request => request.pn), [0, 1, 2])
+  assert.ok(chartRequests.every(request => request.rn === 100 && request.id === '93'))
+  const playlistRequests = report.requests.filter(url => url.includes('/playlist/song/')).map(url => new URL(url))
+  assert.deepEqual(playlistRequests.map(url => url.searchParams.get('pageNo')), ['1', '2'])
+  assert.ok(playlistRequests.every(url => url.searchParams.get('playlistId') === '12345'))
+  report.status = 'PASS'; report.boardCount = board.length; report.playlistCount = playlist.length
   report.backup = 'All/lists/settings gzip exports; all-data restores settings+list; original TXT/CSV exports'
   console.log('PASS original encrypted charts 201 tracks/3 pages, shared-link playlist 65/2 pages, batch collection/edit/order and backups')
 } catch (error) { report.status = 'FAIL'; report.error = String(error.stack || error); report.logs = await host?.logs(); process.exitCode = 1 }

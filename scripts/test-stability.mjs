@@ -11,7 +11,8 @@ import audioFixture from '../tests/ztools/fixtures/audio-server.cjs'
 const duration = Number(process.env.LX_STABILITY_MS || 1800000)
 const cycles = Number(process.env.LX_STABILITY_CYCLES || 50)
 if (!Number.isSafeInteger(duration) || duration < 1000 || !Number.isInteger(cycles) || cycles < 1) throw new Error('Invalid stability parameters')
-mkdirSync('artifacts/stability', { recursive: true })
+const evidence = process.env.LX_STABILITY_OUTPUT || 'artifacts/stability'
+mkdirSync(evidence, { recursive: true })
 const directory = mkdtempSync(join(tmpdir(), 'lx-stability-'))
 const original = join(directory, 'long.mp3')
 const generated = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=22050:cl=mono', '-t', String(Math.ceil(duration / 1000) + 8), '-b:a', '32k', original], { windowsHide: true })
@@ -85,7 +86,7 @@ try {
     assert.notEqual(state.player.status, 'error')
     const metrics = await host.app.evaluate(({ app }) => app.getAppMetrics().map(({ pid, type, cpu, memory }) => ({ pid, type, cpu: cpu.percentCPUUsage, workingSetKB: memory.workingSetSize })))
     samples.push({ elapsedMs: Date.now() - started, state, metrics })
-    writeFileSync('artifacts/stability/progress.json', JSON.stringify({ duration, cycles, samples }, null, 2))
+    writeFileSync(join(evidence, 'progress.json'), JSON.stringify({ duration, cycles, samples }, null, 2))
     console.log(`stability elapsed=${Math.round((Date.now() - started) / 1000)}s played=${Math.round(state.counters.played)}s listeners=${state.services.runtime.bridge.listeners}`)
     await new Promise(resolve => setTimeout(resolve, Math.min(15000, duration - (Date.now() - started))))
   }
@@ -102,4 +103,4 @@ try {
   report.status = 'PASS'; report.elapsedMs = Date.now() - started; report.cycles = cycles; report.detached = detached; report.baseline = baseline; report.final = final; report.samples = samples
   console.log('PASS sustained background playback/download, lifecycle identity/listeners/Audio constructor, decoded PCM')
 } catch (error) { report.error = String(error.stack || error); report.logs = await host?.logs(); report.samples = samples; process.exitCode = 1 }
-finally { writeFileSync('artifacts/stability/report.json', JSON.stringify(report, null, 2)); await host?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await tone.close() }
+finally { writeFileSync(join(evidence, 'report.json'), JSON.stringify(report, null, 2)); await host?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await tone.close() }

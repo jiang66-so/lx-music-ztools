@@ -48,5 +48,5 @@ try {
   writeFileSync('artifacts/renderer/settings.png', Buffer.from(screenshot, 'base64'))
   writeFileSync('artifacts/renderer/report.json', JSON.stringify({ status: 'PASS', data: host.data, layout, theme: 'Manual dark and auto light/dark via public host theme event, opaque styles connected', text: await host.evaluate('document.body.innerText'), logs: await host.logs() }, null, 2))
   console.log('PASS original LX renderer navigation and source settings')
-} catch (error) { writeFileSync('artifacts/renderer/report.json', JSON.stringify({ status: 'FAIL', error: String(error.stack || error), logs: await host?.logs() }, null, 2)); throw error }
+} catch (error) { writeFileSync('artifacts/renderer/report.json', JSON.stringify({ status: 'FAIL', error: String(error.stack || error), theme: await host?.evaluate(`({setting:window.lxData?.appSetting?.['theme.id'],style:window.dom_style?.innerText,connected:window.dom_style?.isConnected,rootStyle:document.documentElement.getAttribute('style'),styles:[...document.querySelectorAll('style')].map(style=>style.textContent.slice(0,180))})`).catch(() => null), logs: await host?.logs() }, null, 2)); throw error }
 finally { await host?.close() }
