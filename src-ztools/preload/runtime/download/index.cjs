@@ -26,7 +26,7 @@ function createDownloadService(options) {
     updateUrl: (...args) => queue.updateUrl(...args),
     pauseTask: async id => {
       const target = queue.getTarget(id)
-      await queue.pause(id)
+      await queue.pause(id, true)
       if (target) await drainTarget(target)
       queue.releaseLock(id)
     },

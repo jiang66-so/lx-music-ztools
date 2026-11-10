@@ -117,11 +117,15 @@ function createQueue({ files, database, maxConcurrent = 3, retryDelay = 100, ref
       task.promise = run(task)
     }
   }
-  async function pause(id) {
+  async function pause(id, reopenFinalized = false) {
     const task = tasks.get(id)
     if (!task) return
     task.controller.abort(failure('下载已暂停', 'ABORT_ERR'))
     await task.promise
+    if (reopenFinalized && task.phase === 'finalized') {
+      // The renderer may still be committing its completed SQL row after this ACK.
+      task.phase = 'raw-published'; task.info.isComplate = false; task.info.status = 'pause'
+    }
     task.status = task.phase === 'finalized' ? 'completed' : 'pause'; persist(task)
     tasks.delete(id)
   }
@@ -190,16 +194,24 @@ function createQueue({ files, database, maxConcurrent = 3, retryDelay = 100, ref
     task.refresh.finish()
   }
   async function finalize(id, error) {
-    const task = tasks.get(id) || records.get(id)
-    if (!task || !published(task)) throw failure('下载任务不在可最终化阶段')
+    const task = tasks.get(id)
+    const assertCurrent = () => {
+      const awaitingFinalization = task && task.status === 'finalizing' && published(task)
+      const revertingFailedUICommit = task && error && task.status === 'completed' && task.phase === 'finalized'
+      if (!task || tasks.get(id) !== task || task.controller.signal.aborted || !awaitingFinalization && !revertingFailedUICommit) throw failure('下载最终化阶段已暂停、替换或失效')
+    }
+    assertCurrent()
     await verifyPublished(task)
+    assertCurrent()
     if (!error) await cleanOwnedTemps(task)
+    assertCurrent()
     task.phase = error ? 'raw-published' : 'finalized'
     task.status = error ? 'error' : 'completed'
     task.info.status = task.status; task.info.isComplate = !error
     if (error) task.info.statusText = typeof error === 'string' ? error : error.message || '下载最终化失败'
     persist(task)
-    locks.delete(task.target.toLowerCase()); pump()
+    if (locks.get(task.target.toLowerCase()) === id) locks.delete(task.target.toLowerCase())
+    pump()
   }
   async function beforeMutation(target) {
     target = authorize(files, target)
@@ -208,6 +220,7 @@ function createQueue({ files, database, maxConcurrent = 3, retryDelay = 100, ref
     if (!task || !published(task)) return null
     if (task.controller?.signal.aborted || task.status !== 'finalizing') throw failure('下载任务已暂停或已失效')
     await verifyPublished(task)
+    if (tasks.get(id) !== task || task.controller?.signal.aborted || task.status !== 'finalizing') throw failure('下载标签阶段已暂停、替换或失效')
     task.phase = 'finalizing'; persist(task)
     return { id, task }
   }

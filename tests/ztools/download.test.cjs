@@ -397,7 +397,7 @@ test('publishing intent cannot claim a different inode user target with identica
   await service.call('startTask', [info, options.directory, true, action => events.push(action)])
   await until(() => events.some(action => action.action === 'error'))
   assert.equal(events.some(action => action.action === 'complete'), false)
-  await assert.rejects(service.call('finalizeTask', [info.id]), /归属|修改/)
+  await assert.rejects(service.call('finalizeTask', [info.id]), /阶段|归属|修改/)
   assert.equal(hash(await fs.readFile(target)), hash(payload))
   assert.equal(hash(await fs.readFile(partialPath)), hash(payload))
 })
@@ -473,4 +473,61 @@ test('publishing intent recovers only its real same-inode hardlinked target and 
   await service.call('removeTask', [info.id])
   assert.deepEqual(await fs.readdir(options.directory), [info.metadata.fileName])
   assert.equal(hash(await fs.readFile(target)), hash(payload))
+})
+for (const stop of ['pause', 'restart']) test(`a finalization ACK waiting for file verification cannot revive a task after ${stop}`, async t => {
+  const options = await fixture(t, (_req, res) => { res.writeHead(200, { 'content-length': payload.length }); res.end(payload) })
+  const { createDownloadService } = require('../../src-ztools/preload/runtime/download/index.cjs')
+  const service = createDownloadService(options); t.after(() => service.dispose())
+  const info = task('ack-verification', options.url), events = []
+  await service.call('startTask', [info, options.directory, false, action => events.push(action)])
+  await until(() => events.some(action => action.action === 'complete'))
+  const nativeFS = require('node:fs'), { Readable } = require('node:stream')
+  const originalRead = nativeFS.createReadStream
+  let release, entered, firstRead = true
+  const gate = new Promise(resolve => { release = resolve }), reading = new Promise(resolve => { entered = resolve })
+  const target = path.join(options.directory, info.metadata.fileName)
+  nativeFS.createReadStream = function(file, ...args) {
+    if (file === target && firstRead) { firstRead = false; entered(); return Readable.from((async function* () { await gate; yield payload })()) }
+    return originalRead.call(this, file, ...args)
+  }
+  try {
+    const ack = service.call('finalizeTask', [info.id])
+    await reading
+    await service.call('pauseTask', [info.id])
+    if (stop === 'restart') {
+      const events = []
+      await service.call('startTask', [info, options.directory, false, action => events.push(action)])
+      await until(() => events.some(action => action.action === 'complete'))
+    }
+    release()
+    await assert.rejects(ack, /暂停|失效|替换/)
+  } finally { nativeFS.createReadStream = originalRead; release() }
+  if (stop === 'pause') {
+    const [restored] = await service.restore()
+    assert.equal(restored.status, 'pause'); assert.equal(restored.isComplate, false)
+    const restarted = []
+    await service.call('startTask', [info, options.directory, false, action => restarted.push(action)])
+    await until(() => restarted.some(action => action.action === 'complete'))
+  }
+  await service.call('finalizeTask', [info.id])
+})
+test('explicit pause after backend ACK reopens pending finalization so UI SQL cancellation can resume without HTTP', async t => {
+  let hits = 0
+  const options = await fixture(t, (_req, res) => { hits++; res.writeHead(200, { 'content-length': payload.length }); res.end(payload) })
+  const { createDownloadService } = require('../../src-ztools/preload/runtime/download/index.cjs')
+  const service = createDownloadService(options); t.after(() => service.dispose())
+  const info = task('ack-before-ui-sql', options.url)
+  async function start() {
+    const events = []
+    await service.call('startTask', [info, options.directory, true, action => events.push(action)])
+    await until(() => events.some(action => action.action === 'complete'))
+  }
+  await start(); await service.call('finalizeTask', [info.id])
+  await service.call('pauseTask', [info.id])
+  const [record] = await service.restore(); assert.equal(record.status, 'pause'); assert.equal(record.isComplate, false)
+  await start(); assert.equal(hits, 1)
+  await service.call('finalizeTask', [info.id])
+  await service.call('finalizeTask', [info.id, 'UI SQL commit failed'])
+  await start(); assert.equal(hits, 1)
+  await service.call('finalizeTask', [info.id])
 })
