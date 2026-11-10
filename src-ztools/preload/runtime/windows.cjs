@@ -13,7 +13,7 @@ async function call(target, method, ...args) {
   return result
 }
 function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
-  let current, closed = false, queue = Promise.resolve(), lastOperation = queue, revision = 0, poll
+  let current, closed = false, reconcilingBounds = false, queue = Promise.resolve(), lastOperation = queue, revision = 0, poll
   const report = error => bridge.emit('bridge:error', { channel: 'desktopLyrics', message: String(error.message || error) })
   const serial = operation => { const next = queue.then(operation); lastOperation = next; revision++; queue = next.catch(report); return next }
   const send = (channel, params, target = current) => target && call(target.window.webContents, 'send', CHILD, { session: target.session, kind: 'event', channel, params })
@@ -54,7 +54,7 @@ function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
     await call(target.window, 'setSkipTaskbar', !lx.appSetting['desktopLyric.isShowTaskbar'])
     await send(lyric.on_config_change, getConfig(lx), target)
   }
-  const changed = keys => { if (keys.some(isConfig)) void serial(apply) }
+  const changed = keys => { if (!reconcilingBounds && keys.some(isConfig)) void serial(apply) }
   const inited = () => { ready = true; void serial(apply) }
   lx.event_app.on('updated_config', changed); lx.event_app.on('main_window_inited', inited)
   const allowed = new Set([lyric.get_config, lyric.set_config, lyric.set_win_bounds, lyric.mouse_enter_leave, lyric.request_main_window_channel, 'lyric:port'])
@@ -68,10 +68,20 @@ function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
       }
       case lyric.set_win_bounds: {
         if (!current || !params || ['x', 'y', 'w', 'h'].some(key => !Number.isFinite(params[key]))) throw new Error('无效歌词窗口尺寸')
-        const before = await call(current.window, 'getBounds')
+        const target = current, before = await call(target.window, 'getBounds')
         const next = bounds(lx.appSetting, { x: before.x + params.x, y: before.y + params.y, width: Math.max(38, params.w), height: Math.max(38, params.h) })
         lx.event_app.update_config({ 'desktopLyric.x': next.x, 'desktopLyric.y': next.y, 'desktopLyric.width': next.width, 'desktopLyric.height': next.height })
-        await queue; return
+        const operation = lastOperation
+        try { await operation } catch (error) {
+          let actual
+          try { actual = await call(target.window, 'getBounds') } catch { actual = before }
+          reconcilingBounds = true
+          try {
+            lx.event_app.update_config({ 'desktopLyric.x': actual.x, 'desktopLyric.y': actual.y, 'desktopLyric.width': actual.width, 'desktopLyric.height': actual.height })
+          } finally { reconcilingBounds = false }
+          throw error
+        }
+        return
       }
       case lyric.mouse_enter_leave: return send(lyric.mouse_enter_leave, Boolean(params))
       case lyric.request_main_window_channel:

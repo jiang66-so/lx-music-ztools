@@ -56,3 +56,39 @@ test('lyrics clamp bounds to a negative-coordinate display and apply top/click-t
   assert.ok(x.calls.some(call => call[0] === 'top' && call[1] === true))
   assert.ok(x.calls.some(call => call[0] === 'ignore' && call[1] === true))
 })
+test('resize RPC reports host bounds errors, reconciles actual bounds, and keeps the queue usable', async t => {
+  for (const failure of [
+    ['async rejection', () => Promise.reject(new Error('injected async setBounds failure'))],
+    ['returned Error', () => new Error('injected returned setBounds error')],
+  ]) {
+    await t.test(failure[0], async t => {
+      const x = fixture(t)
+      await x.service.openLyrics()
+      const win = x.windows[0], session = new URL(win.url, 'file:///').searchParams.get('session')
+      const actual = { x: -900, y: 10, width: 450, height: 100 }
+      const originalSetBounds = win.setBounds.bind(win)
+      win.setBounds = next => failure[1]()
+      win.getBounds = () => actual
+      const sendInvoke = (id, params) => x.ipcRenderer.emit(PARENT, { senderId: 42 }, {
+        session, kind: 'invoke', id, channel: names.set_win_bounds, params,
+      })
+      sendInvoke('resize-failure', { x: 10, y: 5, w: 600, h: 120 })
+      await new Promise(resolve => setImmediate(resolve))
+
+      const failedReply = x.calls.map(call => call[1]).find(packet => packet?.id === 'resize-failure')
+      assert.match(failedReply.error, /injected (async setBounds failure|returned setBounds error)/)
+      assert.equal(failedReply.kind, 'result')
+      assert.deepEqual(
+        Object.fromEntries(['x', 'y', 'width', 'height'].map(key => [key, x.lx.appSetting[`desktopLyric.${key}`]])),
+        { x: actual.x, y: actual.y, width: actual.width, height: actual.height },
+      )
+
+      win.setBounds = next => { originalSetBounds(next); return undefined }
+      sendInvoke('resize-recovery', { x: 10, y: 5, w: 600, h: 120 })
+      await new Promise(resolve => setImmediate(resolve))
+      const recoveryReply = x.calls.map(call => call[1]).find(packet => packet?.id === 'resize-recovery')
+      assert.equal(recoveryReply.error, undefined)
+      assert.equal(recoveryReply.kind, 'result')
+    })
+  }
+})
