@@ -28,6 +28,7 @@ function bindHost({ bridge, files, database, directory, ztools, clipboard }) {
   bridge.register('host:clipboardWrite', text => { if (typeof text !== 'string') throw new TypeError('Clipboard text must be a string'); clipboard.writeText(text) })
   bridge.register(names.close, () => host().outPlugin(false))
   bridge.register(names.min, () => host().outPlugin(false))
+  for (const channel of [names.set_power_save_blocker, names.player_action_set_buttons]) bridge.register(channel, () => ({ supported: false, reason: 'ZTools 未公开独立电源锁和任务栏缩略图按钮接口' }))
   bridge.register(names.quit, () => host().outPlugin(true))
   bridge.register(names.set_app_name, title => { if (typeof title !== 'string') throw new TypeError('Invalid title'); bridge.emit('host:title', title) })
   bridge.register(names.set_window_size, ({ height }) => host().setExpendHeight(height))

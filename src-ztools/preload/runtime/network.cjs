@@ -26,6 +26,7 @@ function createNetwork() {
       return { id, result, cancel }
     },
     cancel(id) { pending.get(id)?.() },
+    inspect: () => ({ pending: pending.size }),
     dispose() { for (const cancel of pending.values()) cancel(); pending.clear() },
   }
 }

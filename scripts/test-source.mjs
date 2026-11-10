@@ -37,7 +37,20 @@ try {
   await invoke('winMain_set_user_api', imported.apiInfo.id)
   assert.equal((await invoke('winMain_request_user_api', input('again', 'again'))).data.url, base + '/audio.wav?id=again')
   await assert.rejects(invoke('winMain_import_user_api', 'not a valid script'), /无效|invalid/)
+  const busy = await invoke('winMain_import_user_api', '/**\n * @name Initialization deadline fixture\n */\nwhile(true){}')
+  await assert.rejects(invoke('winMain_set_user_api', busy.apiInfo.id), /超时/)
+  assert.equal(await host.evaluate('services.diagnose().runtime.source.sessions'), 0)
+  await invoke('winMain_set_user_api', imported.apiInfo.id)
+  assert.equal((await invoke('winMain_request_user_api', input('after-init-hang', 'after-init-hang'))).data.url, base + '/audio.wav?id=after-init-hang')
+  const hung = await invoke('winMain_import_user_api', '/**\n * @name Request deadline fixture\n */\nlx.on(lx.EVENT_NAMES.request,()=>{while(true){}});lx.send(lx.EVENT_NAMES.inited,{sources:{kw:{type:"music",actions:["musicUrl"],qualitys:["128k"]}}});')
+  await invoke('winMain_set_user_api', hung.apiInfo.id)
+  await assert.rejects(invoke('winMain_request_user_api', input('hang', 'hang')), /超时/)
+  assert.equal(await host.evaluate('services.diagnose().runtime.source.sessions'), 0)
+  assert.equal((await invoke('winMain_get_user_api_status')).status, false)
+  await invoke('winMain_set_user_api', imported.apiInfo.id)
+  assert.equal((await invoke('winMain_request_user_api', input('after-request-hang', 'after-request-hang'))).data.url, base + '/audio.wav?id=after-request-hang')
+  record.deadlines = 'Actual busy Workers terminated after init/request deadlines; next source succeeds; UI/host remain responsive'
   record.status = 'PASS'; record.source = { status, response }; record.data = host.data
-  console.log('PASS source import, init, synchronous crypto, HTTP callback, request, quality validation and switch cancellation')
+  console.log('PASS source import/init/crypto/HTTP/quality/switch; busy init and request Workers terminate with recovery')
 } catch (error) { record.status = 'FAIL'; record.error = String(error.stack || error); record.logs = await host?.logs(); process.exitCode = 1 }
 finally { writeFileSync('artifacts/source/report.json', JSON.stringify(record, null, 2)); await host?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }

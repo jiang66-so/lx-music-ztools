@@ -62,6 +62,7 @@ function createSources({ database, network, onStatus, onAlert }) {
     },
     getStatus: () => structuredClone(status),
     getGeneration: () => generation,
+    inspect: () => ({ generation, sessions: session && !session.closed ? 1 : 0, pending: session?.pending.size || 0, http: session?.http.size || 0 }),
     request: input => session ? session.request(input) : Promise.reject(new Error('没有可用的音源')),
     cancel: key => session?.cancel(key),
     async remove(ids) {

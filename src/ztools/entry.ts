@@ -1,11 +1,19 @@
 import './contracts'
 import './shell.css'
 document.documentElement.classList.add('lx-ztools-shell')
-void window.lxHost.invoke('runtime:ready').then(async () => {
+void Promise.resolve().then(async () => {
+  if (!window.lxHost) throw new Error((window as any).lxBootstrapError || '插件预加载未成功，请检查 ZTools 是否支持 Node.js SQLite')
+  await window.lxHost.invoke('runtime:ready')
+  ;(window as any).shouldUseDarkColors = window.ztools.isDarkColors()
+  document.documentElement.classList.remove('transparent')
+  document.documentElement.classList.add('disableTransparent')
+  if (!(window as any).dom_style.isConnected) document.head.appendChild((window as any).dom_style)
   await import('../../vendor/lx/src/renderer/main')
+  await import('./theme.js')
   await import('./player.js')
   await import('./download.js')
   await import('./catalog.js')
+  await import('./commands.js')
 }).catch(error => {
   console.error('LX Music initialization failed', error)
   document.body.replaceChildren()

@@ -1,6 +1,7 @@
 import ts from 'typescript'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs'
 import { resolve, dirname, relative, extname } from 'node:path'
+import syncAdaptation from '../src-ztools/preload/runtime/sync/adapt-source.cjs'
 
 const source = resolve('vendor/lx/src')
 const output = resolve('src-ztools/preload/upstream')
@@ -46,12 +47,14 @@ function compile(input) {
     writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
     return target
   }
-  const originalSource = readFileSync(input, 'utf8').replace("path.join(os.tmpdir(), 'lxmusic_temp')", 'global.lx.tempDir')
+  const originalSource = syncAdaptation.adaptSyncSource(relative(source, input).replaceAll('\\', '/'), readFileSync(input, 'utf8'))
+    .replace("path.join(os.tmpdir(), 'lxmusic_temp')", 'global.lx.tempDir')
   const text = ts.transpileModule(originalSource, { fileName: input, compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true, removeComments: false,
   } }).outputText
   const result = text.replace(/require\((['"])([^'"]+)\1\)/g, (match, quote, specifier) => {
     let dependency
+    if (specifier === '@ztools/sync/storage') return `require(${JSON.stringify(relative(dirname(target), resolve('src-ztools/preload/runtime/sync/storage.cjs')).replaceAll('\\', '/'))})`
     if (specifier === 'electron-log/node') return `require(${JSON.stringify(relative(dirname(target), resolve('src-ztools/preload/runtime/log.cjs')).replaceAll('\\', '/'))})`
     if (specifier.startsWith('@common/')) dependency = resolve(source, 'common', specifier.slice(8))
     else if (specifier.startsWith('@main/')) dependency = resolve(source, 'main', specifier.slice(6))

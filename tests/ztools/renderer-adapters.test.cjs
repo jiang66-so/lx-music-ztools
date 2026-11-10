@@ -36,3 +36,20 @@ test('Windows selected paths preserve drive roots and UNC when used by original 
   assert.equal(paths.joinPath('C:\\音乐', '歌手', '歌曲.mp3'), 'C:/音乐/歌手/歌曲.mp3')
   assert.equal(paths.joinPath('\\\\server\\share', '音乐', '歌曲.mp3'), '//server/share/音乐/歌曲.mp3')
 })
+test('original lyric MessagePort handshake transports messages without transferring Node handles', () => {
+  const events = new Map(), sent = []
+  const host = { on(name, fn) { const set = events.get(name) || new Set(); set.add(fn); events.set(name, set) },
+    off: (name, fn) => events.get(name)?.delete(fn), send: (name, params) => sent.push({ name, params }),
+    subscribe(name, fn) { this.on(name, fn); return () => this.off(name, fn) } }
+  const ipc = load('src/ztools/rendererIpc.ts', { lxHost: host })
+  let port, received
+  ipc.rendererOn('winMain_process_new_desktop_lyric_client', ({ event }) => { port = event.ports[0]; port.onmessage = value => { received = value.data } })
+  for (const fn of events.get('winMain_process_new_desktop_lyric_client')) fn()
+  port.postMessage({ action: 'set_play', data: 1234 })
+  assert.equal(sent[0].name, 'lyric:port')
+  assert.equal(sent[0].params.data, 1234)
+  for (const fn of events.get('lyric:port:receive')) fn({ action: 'get_info' })
+  assert.equal(received.action, 'get_info')
+  port.close()
+  assert.equal(events.get('lyric:port:receive').size, 0)
+})
