@@ -113,3 +113,23 @@ for (const operation of ['pauseTask', 'removeTask']) test(`${operation} awaits t
   const sourceBytes = await fs.readFile(path.join(__dirname, 'fixtures/download/tone.mp3'))
   assert.deepEqual(await fs.readFile(filePath), sourceBytes)
 })
+test('service uses its injected metadata executor and preserves original audio when that executor fails', async t => {
+  const { root, files } = await setup(t)
+  const filePath = path.join(root, 'injected.mp3')
+  const original = await fs.readFile(path.join(__dirname, 'fixtures/download/tone.mp3'))
+  await fs.writeFile(filePath, original)
+  const { createDownloadService } = require('../../src-ztools/preload/runtime/download/index.cjs')
+  let calls = 0
+  const service = createDownloadService({ files, directory: root, runWriter: async data => {
+    calls++
+    assert.equal(data.ext, '.mp3'); assert.equal(data.meta.title, '注入标签')
+    assert.notEqual(data.filePath, filePath)
+    assert.deepEqual(await fs.readFile(data.filePath), original)
+    await fs.writeFile(data.filePath, 'executor partially modified its private copy')
+    throw new Error('isolated browser executor failed')
+  } }); t.after(() => service.dispose())
+  await assert.rejects(service.call('writeMeta', [{ filePath, title: '注入标签', artist: '歌手', album: '专辑' }, lyrics]), /isolated browser executor failed/)
+  assert.equal(calls, 1)
+  assert.deepEqual(await fs.readFile(filePath), original)
+  assert.deepEqual(await fs.readdir(root), ['injected.mp3'])
+})

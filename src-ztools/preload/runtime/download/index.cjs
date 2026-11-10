@@ -41,7 +41,7 @@ function createDownloadService(options) {
       const target = options.files.scope.authorize(args[0].filePath)
       return track(target, (async () => {
         const token = await queue.beforeMutation(target)
-        const result = await metadata.writeMeta(options.files, ...args)
+        const result = await metadata.writeMeta(options.files, args[0], args[1], args[2], options.runWriter)
         await queue.afterMutation(token)
         return result
       })())

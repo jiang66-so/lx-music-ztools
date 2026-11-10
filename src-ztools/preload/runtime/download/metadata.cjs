@@ -45,7 +45,7 @@ function runWriter(data) {
     worker.on('exit', code => { if (code || !message?.ok) reject(failure(message?.error || `标签写入线程退出 ${code}`)); else resolve(message.metadata) })
   })
 }
-async function writeMeta(files, info, lyric = { lyric: '' }, proxy) {
+async function writeMeta(files, info, lyric = { lyric: '' }, proxy, writer = runWriter) {
   const filePath = authorize(files, info.filePath)
   return serial(filePath, async () => {
     const ext = path.extname(filePath).toLowerCase()
@@ -55,7 +55,7 @@ async function writeMeta(files, info, lyric = { lyric: '' }, proxy) {
     const meta = { title: info.title || '', artist: info.artist || '', album: info.album || '', lyrics: buildLyrics(lyric, info.isEmbedLyricLx, info.isEmbedLyricT, info.isEmbedLyricR) || '' }
     try {
       await fsp.copyFile(authorize(files, filePath), authorize(files, temp), fs.constants.COPYFILE_EXCL)
-      const result = await runWriter({ filePath: authorize(files, temp), ext, meta, cover })
+      const result = await writer({ filePath: authorize(files, temp), ext, meta, cover })
       // Rename over the original only after the isolated writer and parser both finished.
       await fsp.rename(authorize(files, temp), authorize(files, filePath))
       return result
