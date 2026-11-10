@@ -13,7 +13,7 @@ function copyDirectory(source, target) {
 }
 
 /** Load the actual production plugin in a separate, disposable ZTools instance. */
-export async function startHost(entry, { zip } = {}) {
+export async function startHost(entry, { zip = process.env.ZTOOLS_PLUGIN_ZIP } = {}) {
   const data = mkdtempSync(join(tmpdir(), 'lx-ztools-host-'))
   mkdirSync(join(data, 'legacy'))
   const plugin = join(data, 'plugin')

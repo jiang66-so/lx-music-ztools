@@ -32,6 +32,11 @@ try {
   await click('导入')
   await expect.poll(() => host.evaluate(`lxHost.invoke('winMain_get_user_api_list').then(x=>x.length)`), { timeout: 10000 }).toBe(2)
   report.status = 'PASS'; report.sources = await host.evaluate(`lxHost.invoke('winMain_get_user_api_list')`)
+  const png = await host.app.evaluate(async ({ webContents }) => {
+    const wc = webContents.getAllWebContents().find(x => x.getURL().includes('/dist/lx.html'))
+    return (await wc.capturePage()).toPNG().toString('base64')
+  })
+  writeFileSync('artifacts/source-ui/import.png', Buffer.from(png, 'base64'))
   console.log('PASS original LX local file and URL source import controls')
 } catch (error) { report.status = 'FAIL'; report.error = String(error.stack || error); report.logs = await host?.logs(); report.rejections = await host?.evaluate('window.__testSourceErrors'); process.exitCode = 1 }
 finally { writeFileSync('artifacts/source-ui/report.json', JSON.stringify(report, null, 2)); await host?.close(); await fixture.close() }

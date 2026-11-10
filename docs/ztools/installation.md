@@ -4,10 +4,10 @@
 
 ## 安装开发包
 
-1. 在仓库根目录执行 `npm ci` 和 `npm ci --prefix src-ztools/preload`。
+1. 在仓库根目录执行 `npm ci`。构建时会自动安装插件的独立运行依赖。
 2. 执行 `npm run pack`。运行依赖以可读文件包含在 ZIP 内，安装后无需运行 Vite/Node 开发服务器。
 3. 在 ZTools 的设置中打开「插件应用」，点击「导入本地插件」。
-4. 选择生成的 `../output/lx-music-ztools/lx-music-ztools-0.0.1.zip`，确认安装并启用。
+4. 选择生成的 `../output/lx-music-ztools/lx-music-ztools-0.0.2.zip`，确认安装并启用。
 5. 回到主搜索框输入 `lxmusic`、`LX Music` 或 `洛雪音乐`。
 
 也可将 `src-ztools/plugin.json` 登记为开发项目后，在 ZTools 开发工具中安装、启用该项目。单纯选择目录或生成 plugin.json 还不等于安装。

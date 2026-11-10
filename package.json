@@ -1,9 +1,10 @@
 {
   "name": "lx-music-ztools",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "LX Music native ZTools port with isolated custom sources (development)",
   "type": "module",
   "scripts": {
+    "prebuild": "npm ci --prefix src-ztools/preload --omit=dev --no-audit --no-fund",
     "dev": "npm run build:runtime && node scripts/build-worker.mjs && webpack --watch --config build-config/ztools/webpack.config.cjs",
     "dev:diagnostics": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vue-tsc && vite build && node scripts/build-runtime.mjs && node scripts/build-worker.mjs && node scripts/build-lx.mjs && node scripts/check.mjs",

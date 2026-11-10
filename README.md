@@ -1,6 +1,6 @@
 # LX Music for ZTools
 
-将 LX Music 2.12.6 移植到 ZTools 的开发项目，不依赖另装 LX 桌面版。当前版本为 **0.0.1 开发版**，完整移植仍在进行。
+将 LX Music 2.12.6 移植到 ZTools 的开发项目，不依赖另装 LX 桌面版。当前版本为 **0.0.2 开发版**，完整移植仍在进行。
 
 目前已验证原 LX 界面、自定义音源本地/URL 导入、隔离执行、受控音源解析与音频播放、暂停/继续、后台播放及下一首。下载、同步、开放 API 等功能尚未完成验证，详见 [功能与验证状态](docs/ztools/compatibility.md)。不预置第三方音源。
 
@@ -8,7 +8,6 @@
 
 ```powershell
 npm ci
-npm ci --prefix src-ztools/preload
 npm run build:ztools
 ```
 
@@ -47,9 +46,9 @@ npm run publish:plugin
 
 发布包装器复用已登录的 gh 凭据，替换官方 CLI 的认证入口，并通过 gh api 发送真实 GitHub REST 请求以适配本机网络；其余发布校验、Fork、同步、提交、推送和 Draft PR 由官方 CLI 执行。缓存位于 `~/.config/ztools/lx-music-ztools-sparse`，凭据仅用于当前进程，完成后清除缓存 remote URL 中的凭据。
 
-CLI 1.3.2 要求版本日志标题 `## 0.0.1 - YYYY-MM-DD`、非默认图标以及干净的 Git 工作区。该版本会从最新 upstream/main 重建发布分支，并使用精确 force-with-lease 防止覆盖竞态提交；这与官网页面旧版“只追加、不改写”的描述不同。
+CLI 1.3.2 要求当前版本的日志标题 `## 0.0.2 - YYYY-MM-DD`、非默认图标以及干净的 Git 工作区。该版本会从最新 upstream/main 重建发布分支，并使用精确 force-with-lease 防止覆盖竞态提交；这与官网页面旧版“只追加、不改写”的描述不同。
 
-Draft PR 创建后仍需补充截图并审核自检清单。框架验证版保持 Draft，不宣称已完成音乐功能。
+Draft PR 创建后须补充截图、自检结果和明确的功能范围，再提交审核。当前以开发版范围送审，不宣称下载、同步等完整移植已经完成。
 
 ## 来源与许可
 
