@@ -1,9 +1,10 @@
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { registerHooks } from 'node:module'
 import assert from 'node:assert/strict'
+import { adaptCliUpstream } from './publish-platform.mjs'
 
 // 所有 Git 写入均指向新建临时仓库；GitHub 和认证接口由本文件替换为演练响应。
 const root = mkdtempSync(join(tmpdir(), 'lx-publish-'))
@@ -38,6 +39,7 @@ registerHooks({
     return next(specifier, context)
   },
   load(url, context, next) {
+    if (url.endsWith('/@ztools-center/plugin-cli/dist/upstream.js')) return { format: 'module', shortCircuit: true, source: adaptCliUpstream(readFileSync(new URL(url), 'utf8')) }
     if (url === 'lx-test:auth') return { format: 'module', shortCircuit: true, source: 'export async function ensureAuth(){ return "local-test-only" }' }
     if (url === 'lx-test:github') return { format: 'module', shortCircuit: true, source: `
       import fs from 'node:fs';
@@ -62,9 +64,12 @@ assert.ok(!tree.includes('node_modules/'))
 assert.ok(!tree.includes('src-ztools/dist/'))
 assert.ok(!tree.includes('artifacts/'))
 assert.ok(existsSync(join(project, '.git')))
+// Reproduce an existing PR on a machine without saved upstream-sync state.
+// This forces the CLI to quote the already-published branch in git fetch.
+unlinkSync(join(project, '.git', 'ztools-upstream-sync.json'))
 await publish()
 assert.equal(JSON.parse(readFileSync(process.env.LX_REHEARSAL_RECORD, 'utf8')).number, 1)
 process.chdir(source)
 mkdirSync('../output/lx-music-ztools', { recursive: true })
-writeFileSync('../output/lx-music-ztools/publish-rehearsal.json', JSON.stringify({ result: 'PASS', mode: 'local Git + mocked GitHub/auth', cli: '1.3.2', checks: ['first publish', 'repeat publish', 'draft PR body', 'source file filtering'], evidenceRoot: root }, null, 2))
+writeFileSync('../output/lx-music-ztools/publish-rehearsal.json', JSON.stringify({ result: 'PASS', mode: 'local Git + mocked GitHub/auth', cli: '1.3.2', checks: ['first publish', 'repeat publish without saved upstream state', 'draft PR body', 'source file filtering'], evidenceRoot: root }, null, 2))
 console.log('PASS 官方 CLI 隔离发布演练；未请求 GitHub，未验证真实 OAuth/PR。')

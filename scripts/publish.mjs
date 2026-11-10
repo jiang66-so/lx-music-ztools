@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
+import { adaptCliUpstream } from './publish-platform.mjs'
 
 // 复用用户已经登录的 GitHub CLI，不把凭据写入项目或 CLI 配置。
 const token = execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -19,6 +20,7 @@ registerHooks({
     return next(specifier, context)
   },
   load(url, context, next) {
+    if (url.endsWith('/@ztools-center/plugin-cli/dist/upstream.js')) return { format: 'module', shortCircuit: true, source: adaptCliUpstream(readFileSync(new URL(url), 'utf8')) }
     if (url === 'lx-auth:gh') return { format: 'module', shortCircuit: true, source: 'export async function ensureAuth(){ return globalThis[Symbol.for("lx-publish-token")] }' }
     if (url.endsWith('/@ztools-center/plugin-cli/dist/github.js')) {
       // Windows 当前网络下 Node HTTPS 直连失败；保留官方 API 业务逻辑，使用 gh 发送真实请求。

@@ -44,7 +44,7 @@ git commit -m "chore: prepare release"
 npm run publish:plugin
 ```
 
-发布包装器复用已登录的 gh 凭据，替换官方 CLI 的认证入口，并通过 gh api 发送真实 GitHub REST 请求以适配本机网络；其余发布校验、Fork、同步、提交、推送和 Draft PR 由官方 CLI 执行。缓存位于 `~/.config/ztools/lx-music-ztools-sparse`，凭据仅用于当前进程，完成后清除缓存 remote URL 中的凭据。
+发布包装器复用已登录的 gh 凭据，通过 gh api 发送真实 GitHub REST 请求，并修正 CLI 1.3.2 在 Windows 下的 Git 参数引号；其余发布校验、Fork、上游同步与分支保护、提交、推送和 Draft PR 由官方 CLI 执行。缓存位于 `~/.config/ztools/lx-music-ztools-sparse`，凭据仅用于当前进程，完成后清除缓存 remote URL 中的凭据。
 
 CLI 1.3.2 要求当前版本的日志标题 `## 0.0.2 - YYYY-MM-DD`、非默认图标以及干净的 Git 工作区。该版本会从最新 upstream/main 重建发布分支，并使用精确 force-with-lease 防止覆盖竞态提交；这与官网页面旧版“只追加、不改写”的描述不同。
 
