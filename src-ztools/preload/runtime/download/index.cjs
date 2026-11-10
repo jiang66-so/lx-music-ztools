@@ -42,7 +42,7 @@ function createDownloadService(options) {
       return track(target, (async () => {
         const token = await queue.beforeMutation(target)
         const result = await metadata.writeMeta(options.files, args[0], args[1], args[2], options.runWriter)
-        await queue.afterMutation(token)
+        await queue.afterMutation(token, result?.fileIdentity)
         return result
       })())
     },

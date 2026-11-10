@@ -3,7 +3,7 @@ const fsp = fs.promises
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
 const { Worker } = require('node:worker_threads')
-const { authorize, openResponse, failure } = require('./transfer.cjs')
+const { authorize, openResponse, failure, fileIdentity } = require('./transfer.cjs')
 const { buildLyrics } = require('../../upstream/renderer/worker/download/lrcTool.cjs')
 const imageSize = require('image-size')
 const iconv = require('iconv-lite')
@@ -56,9 +56,11 @@ async function writeMeta(files, info, lyric = { lyric: '' }, proxy, writer = run
     try {
       await fsp.copyFile(authorize(files, filePath), authorize(files, temp), fs.constants.COPYFILE_EXCL)
       const result = await writer({ filePath: authorize(files, temp), ext, meta, cover })
+      const publishedIdentity = await fileIdentity(temp)
+      if (!publishedIdentity) throw failure('标签副本缺少可靠文件身份')
       // Rename over the original only after the isolated writer and parser both finished.
       await fsp.rename(authorize(files, temp), authorize(files, filePath))
-      return result
+      return { ...result, fileIdentity: publishedIdentity }
     } finally { await fsp.rm(authorize(files, temp), { force: true }) }
   })
 }

@@ -9,12 +9,32 @@ const tunnel = require('tunnel')
 
 const failure = (message, code = 'DOWNLOAD_INVALID') => Object.assign(new Error(message), { code })
 function authorize(files, target) { return files.scope.authorize(target) }
-async function atomicJSON(files, target, value) {
+function statIdentity(stat) {
+  return stat.isFile() && stat.ino > 0n ? { dev: stat.dev.toString(), ino: stat.ino.toString() } : null
+}
+function validIdentity(value) { return value && typeof value.dev === 'string' && /^\d+$/.test(value.dev) && typeof value.ino === 'string' && /^\d+$/.test(value.ino) && value.ino !== '0' }
+function sameIdentity(left, right) { return !!validIdentity(left) && !!validIdentity(right) && left.dev === right.dev && left.ino === right.ino }
+async function fileIdentity(target) { return statIdentity(await fsp.lstat(target, { bigint: true })) }
+async function removeOwned(files, target, expected) {
+  if (!expected) return false
+  authorize(files, target)
+  const current = await fileIdentity(target).catch(error => { if (error.code !== 'ENOENT') throw error; return null })
+  if (!sameIdentity(expected, current)) return false
+  await fsp.unlink(target)
+  return true
+}
+async function atomicJSON(files, target, value, expectedIdentity) {
   const temp = authorize(files, target + `.${randomUUID()}.tmp`)
+  let tempIdentity
   try {
     await fsp.writeFile(temp, JSON.stringify(value), { flag: 'wx' })
-    await fsp.rename(authorize(files, temp), authorize(files, target))
-  } finally { await fsp.rm(authorize(files, temp), { force: true }) }
+    tempIdentity = await fileIdentity(temp)
+    if (expectedIdentity) {
+      if (!sameIdentity(expectedIdentity, await fileIdentity(target))) throw failure('临时状态文件归属已变化', 'DOWNLOAD_OWNERSHIP')
+      await fsp.rename(authorize(files, temp), authorize(files, target))
+    } else await fsp.link(authorize(files, temp), authorize(files, target))
+    return await fileIdentity(target)
+  } finally { await removeOwned(files, temp, tempIdentity) }
 }
 function validator(headers) {
   if (typeof headers.etag === 'string' && /^"[^\r\n]*"$/.test(headers.etag)) return headers.etag
@@ -49,15 +69,21 @@ async function sha256(target) {
   return hash.digest('hex')
 }
 /** A single network attempt. Only the caller may publish the verified private file. */
-async function transfer({ files, url, partialPath, checkpointPath, identity, signal, proxy, onProgress, timeout }) {
+async function transfer({ files, url, partialPath, checkpointPath, identity, signal, proxy, onProgress, onOwnership, timeout }) {
+  authorize(files, partialPath); authorize(files, checkpointPath)
+  // Inspect the leaf itself before canonicalization; a symlink must never become an owned file.
+  const initialPartialIdentity = await fileIdentity(partialPath).catch(error => { if (error.code !== 'ENOENT') throw error; return null })
+  let checkpointIdentity = await fileIdentity(checkpointPath).catch(error => { if (error.code !== 'ENOENT') throw error; return null })
   partialPath = authorize(files, partialPath); checkpointPath = authorize(files, checkpointPath)
   signal?.throwIfAborted()
   let checkpoint, offset = 0
   try {
     checkpoint = JSON.parse(await fsp.readFile(checkpointPath, 'utf8'))
     const stats = await fsp.stat(partialPath)
+    if (!sameIdentity(initialPartialIdentity, checkpoint.fileIdentity)) throw failure('临时音频文件归属已变化', 'DOWNLOAD_OWNERSHIP')
     if (checkpoint.version === 1 && checkpoint.identity === identity && checkpoint.url === url && typeof checkpoint.resourceURL === 'string' && checkpoint.validator && !checkpoint.validator.startsWith('W/') && stats.size === checkpoint.offset && stats.size > 0 && (!checkpoint.total || stats.size < checkpoint.total)) offset = stats.size
   } catch (error) { if (!['ENOENT', undefined].includes(error.code) && !(error instanceof SyntaxError)) throw error }
+  if (initialPartialIdentity && (!checkpoint || !sameIdentity(initialPartialIdentity, checkpoint.fileIdentity))) throw failure('临时音频文件归属不明', 'DOWNLOAD_OWNERSHIP')
   const headers = offset ? { Range: `bytes=${offset}-`, 'If-Range': checkpoint.validator } : {}
   const response = await openResponse(url, { headers, signal, proxy, timeout })
   const rejectResponse = async error => { response.destroy(); throw error }
@@ -75,17 +101,25 @@ async function transfer({ files, url, partialPath, checkpointPath, identity, sig
     if (!match) return rejectResponse(failure('无效 Content-Range'))
     const [start, end, size] = match.slice(1).map(Number)
     if (offset && (currentValidator !== checkpoint.validator || response.resourceURL !== checkpoint.resourceURL)) {
-      await fsp.writeFile(authorize(files, partialPath), Buffer.alloc(0))
-      await fsp.rm(authorize(files, checkpointPath), { force: true })
+      checkpointIdentity = await atomicJSON(files, checkpointPath, { ...checkpoint, offset: 0, validator: null }, checkpointIdentity)
+      onOwnership?.({ partial: initialPartialIdentity, checkpoint: checkpointIdentity })
       return rejectResponse(failure('续传资源已变化', 'ENTITY_CHANGED'))
     }
     if (![start, end, size].every(Number.isSafeInteger) || start !== offset || end < start || end !== size - 1 || (expected !== null && expected !== end - start + 1) || (offset && checkpoint.total && size !== checkpoint.total)) return rejectResponse(failure('续传范围或长度不一致'))
     total = size; expected = end - start + 1
   } else { offset = 0; total = expected || 0 }
-  checkpoint = { version: 1, identity, url, resourceURL: response.resourceURL, validator: currentValidator, offset, total }
-  // Truncate BEFORE publishing the new checkpoint: a killed 200 restart cannot reuse old bytes.
-  if (!offset) await fsp.writeFile(authorize(files, partialPath), Buffer.alloc(0))
-  await atomicJSON(files, checkpointPath, checkpoint)
+  const handle = await fsp.open(authorize(files, partialPath), initialPartialIdentity ? 'r+' : 'wx')
+  let partialIdentity
+  try {
+    partialIdentity = statIdentity(await handle.stat({ bigint: true }))
+    if (!partialIdentity || initialPartialIdentity && !sameIdentity(initialPartialIdentity, partialIdentity)) throw failure('临时音频文件归属已变化', 'DOWNLOAD_OWNERSHIP')
+    onOwnership?.({ partial: partialIdentity, checkpoint: checkpointIdentity })
+    // Retain the owned handle across truncation and streaming; never reopen a swapped pathname.
+    if (!offset) await handle.truncate(0)
+    checkpoint = { version: 1, identity, url, resourceURL: response.resourceURL, validator: currentValidator, offset, total, fileIdentity: partialIdentity }
+    checkpointIdentity = await atomicJSON(files, checkpointPath, checkpoint, checkpointIdentity)
+    onOwnership?.({ partial: partialIdentity, checkpoint: checkpointIdentity })
+  } catch (error) { await handle.close(); response.destroy(); throw error }
   let received = 0
   const started = Date.now()
   const meter = new Transform({ transform(chunk, encoding, done) {
@@ -94,7 +128,7 @@ async function transfer({ files, url, partialPath, checkpointPath, identity, sig
     onProgress?.({ downloaded: offset + received, total, progress: total ? Math.min(100, (offset + received) / total * 100) : 0, speed: `${((received / Math.max(1, Date.now() - started)) * 1000 / 1024).toFixed(1)} KB`, writeQueue: 0 })
     done(null, chunk)
   } })
-  const writer = fs.createWriteStream(authorize(files, partialPath), { flags: offset ? 'a' : 'w' })
+  const writer = handle.createWriteStream({ start: offset, autoClose: true })
   const closed = new Promise(resolve => writer.once('close', resolve))
   try {
     await pipeline(response, meter, writer, { signal })
@@ -103,15 +137,19 @@ async function transfer({ files, url, partialPath, checkpointPath, identity, sig
     if (!response.complete || !received || expected !== null && received !== expected) throw failure('下载响应未完整结束')
     const stats = await fsp.stat(authorize(files, partialPath))
     if (stats.size !== offset + received || total && stats.size !== total) throw failure('落盘长度不一致')
-    const handle = await fsp.open(authorize(files, partialPath), 'r+')
-    try { await handle.sync() } finally { await handle.close() }
-    return { size: stats.size, sha256: await sha256(authorize(files, partialPath)), validator: currentValidator, total: total || stats.size }
+    if (!sameIdentity(partialIdentity, await fileIdentity(partialPath))) throw failure('下载临时音频已被替换', 'DOWNLOAD_OWNERSHIP')
+    const syncHandle = await fsp.open(authorize(files, partialPath), 'r+')
+    try { await syncHandle.sync() } finally { await syncHandle.close() }
+    return { size: stats.size, sha256: await sha256(authorize(files, partialPath)), fileIdentity: partialIdentity, validator: currentValidator, total: total || stats.size }
   } finally {
     // Abort may reject pipeline before a pending filesystem write/close completes.
     // Snapshot only after close; otherwise pause can persist an offset behind real bytes.
     await closed
     const stats = await fsp.stat(authorize(files, partialPath)).catch(() => null)
-    if (stats) await atomicJSON(files, checkpointPath, { ...checkpoint, offset: stats.size })
+    if (stats && sameIdentity(partialIdentity, await fileIdentity(partialPath))) {
+      checkpointIdentity = await atomicJSON(files, checkpointPath, { ...checkpoint, offset: stats.size }, checkpointIdentity)
+      onOwnership?.({ partial: partialIdentity, checkpoint: checkpointIdentity })
+    }
   }
 }
-module.exports = { transfer, openResponse, sha256, atomicJSON, authorize, failure }
+module.exports = { transfer, openResponse, sha256, atomicJSON, authorize, failure, fileIdentity, sameIdentity, removeOwned }
