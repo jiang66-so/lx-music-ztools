@@ -5,6 +5,8 @@ const { randomUUID } = require('node:crypto')
 const { Worker } = require('node:worker_threads')
 const { authorize, openResponse, failure } = require('./transfer.cjs')
 const { buildLyrics } = require('../../upstream/renderer/worker/download/lrcTool.cjs')
+const imageSize = require('image-size')
+const iconv = require('iconv-lite')
 const operations = new Set()
 const pathLocks = new Map()
 
@@ -29,7 +31,7 @@ async function coverBytes(url, proxy) {
     for await (const chunk of response) { size += chunk.length; if (size > 16 * 1024 * 1024) { response.destroy(); throw failure('封面文件过大') } chunks.push(chunk) }
     if (!response.complete || !size) throw failure('封面响应不完整')
     const data = Buffer.concat(chunks)
-    const dimensions = require('image-size')(data)
+    const dimensions = imageSize(data)
     if (!['png', 'jpg'].includes(dimensions.type)) throw failure('封面须为 PNG/JPEG')
     return { data, width: dimensions.width, height: dimensions.height, mime: dimensions.type === 'jpg' ? 'image/jpeg' : 'image/png' }
   } finally { clearTimeout(timer) }
@@ -64,7 +66,6 @@ async function saveLrc(files, lyric, info) {
   const filePath = authorize(files, info.filePath)
   return serial(filePath, async () => {
     const temp = authorize(files, filePath + `.lx-${randomUUID()}.tmp`)
-    const iconv = require('iconv-lite')
     const text = buildLyrics(lyric, info.downloadLxlrc, info.downloadTlrc, info.downloadRlrc) || ''
     const data = iconv.encode(text, info.format === 'gbk' ? 'gbk' : 'utf8', { addBOM: true })
     try {

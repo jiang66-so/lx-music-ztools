@@ -5,6 +5,7 @@ const https = require('node:https')
 const { createHash, randomUUID } = require('node:crypto')
 const { Transform } = require('node:stream')
 const { pipeline } = require('node:stream/promises')
+const tunnel = require('tunnel')
 
 const failure = (message, code = 'DOWNLOAD_INVALID') => Object.assign(new Error(message), { code })
 function authorize(files, target) { return files.scope.authorize(target) }
@@ -26,7 +27,6 @@ function openResponse(url, { headers = {}, signal, proxy, timeout = 30000, redir
     try { address = new URL(url); if (!['http:', 'https:'].includes(address.protocol)) throw failure('仅支持 HTTP/HTTPS 下载地址') } catch (error) { reject(error); return }
     let agent
     if (proxy?.host) {
-      const tunnel = require('tunnel')
       agent = (address.protocol === 'https:' ? tunnel.httpsOverHttp : tunnel.httpOverHttp)({ proxy: { host: proxy.host, port: proxy.port } })
     }
     const request = (address.protocol === 'https:' ? https : http).get(address, { headers: { 'accept-encoding': 'identity', ...headers }, signal, agent }, response => {

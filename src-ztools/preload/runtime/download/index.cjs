@@ -1,4 +1,6 @@
 const { createQueue } = require('./queue.cjs')
+const { createDownloadInfo } = require('../../upstream/renderer/worker/download/utils.cjs')
+const metadata = require('./metadata.cjs')
 function createDownloadService(options) {
   const queue = createQueue(options)
   let closed = false, disposal
@@ -13,12 +15,11 @@ function createDownloadService(options) {
   async function drainTarget(target) {
     // Track through fingerprint persistence, not merely the worker's file rename.
     await Promise.allSettled([...(metadataOperations.get(target) || [])])
-    await require('./metadata.cjs').drainTarget(target)
+    await metadata.drainTarget(target)
   }
   const methods = {
     checkList: (list, musicInfo, quality, ext) => list.some(item => item.id === musicInfo.id && (item.metadata.quality === quality || item.metadata.ext === ext)),
     createDownloadTasks: (list, quality, format, qualityList, listId) => {
-      const { createDownloadInfo } = require('../../upstream/renderer/worker/download/utils.cjs')
       return JSON.parse(JSON.stringify(list)).map(info => createDownloadInfo(info, quality, format, qualityList, listId))
     },
     startTask: (...args) => queue.start(...args),
@@ -40,12 +41,12 @@ function createDownloadService(options) {
       const target = options.files.scope.authorize(args[0].filePath)
       return track(target, (async () => {
         const token = await queue.beforeMutation(target)
-        const result = await require('./metadata.cjs').writeMeta(options.files, ...args)
+        const result = await metadata.writeMeta(options.files, ...args)
         await queue.afterMutation(token)
         return result
       })())
     },
-    saveLrc: (...args) => require('./metadata.cjs').saveLrc(options.files, ...args),
+    saveLrc: (...args) => metadata.saveLrc(options.files, ...args),
   }
   return { async call(method, args = []) {
     if (closed) throw new Error('下载服务已关闭')
@@ -56,7 +57,7 @@ function createDownloadService(options) {
     return disposal ||= (async () => {
       await queue.dispose()
       await Promise.allSettled([...metadataOperations.values()].flatMap(operations => [...operations]))
-      await require('./metadata.cjs').drain()
+      await metadata.drain()
     })()
   } }
 }

@@ -357,3 +357,20 @@ test('concurrency getter follows the live setting at each pump', async t => {
   await until(() => hits === 2)
   await service.dispose()
 })
+test('UI invocation does not resolve preload download modules after the realm boundary', async t => {
+  const options = await fixture(t, (_req, res) => res.end())
+  const { createDownloadService } = require('../../src-ztools/preload/runtime/download/index.cjs')
+  const Module = require('node:module')
+  const originalRequire = Module.prototype.require
+  const service = createDownloadService(options)
+  Module.prototype.require = function(specifier) {
+    if (this.filename.includes(`${path.sep}runtime${path.sep}download${path.sep}`) && !this.filename.endsWith('metadata-worker.cjs')) throw new Error(`late preload require: ${specifier}`)
+    return originalRequire.call(this, specifier)
+  }
+  try {
+    const list = await service.call('createDownloadTasks', [[{ id: 'realm', name: '跨域', singer: '歌手', source: 'test', meta: { _qualitys: { '128k': {} } } }], '128k', '歌名', { test: ['128k'] }])
+    assert.equal(list[0].id, 'realm_128k_mp3')
+    await service.call('saveLrc', [{ lyric: '[00:01.000]中文' }, { filePath: path.join(options.directory, 'realm.lrc'), format: 'utf8' }])
+    await service.dispose()
+  } finally { Module.prototype.require = originalRequire }
+})
