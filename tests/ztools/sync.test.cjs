@@ -80,11 +80,12 @@ test('sync host patches reject upstream source drift and retain wire/merge modul
   const { adaptSyncSource } = require('../../src-ztools/preload/runtime/sync/adapt-source.cjs')
   const fs = require('node:fs')
   const root = join(__dirname, '../../vendor/lx/src/')
-  for (const file of ['main/modules/sync/server/server/auth.ts', 'main/modules/sync/server/modules/list/sync/sync.ts', 'main/modules/sync/server/modules/dislike/sync/sync.ts', 'main/modules/sync/utils.ts']) {
+  for (const file of ['main/modules/sync/server/utils/tools.ts', 'main/modules/sync/server/modules/list/sync/sync.ts', 'main/modules/sync/server/modules/dislike/sync/sync.ts', 'main/modules/sync/utils.ts']) {
     const source = fs.readFileSync(join(root, file), 'utf8').replaceAll('\r\n', '\n')
     assert.equal(adaptSyncSource(file, source), source)
   }
   assert.throws(() => adaptSyncSource('main/modules/sync/client/client.ts', 'upstream changed'), /shape changed/)
+  for (const file of ['main/modules/sync/server/user/data.ts', 'main/modules/sync/server/server/auth.ts']) assert.throws(() => adaptSyncSource(file, 'upstream changed'), /shape changed/)
 })
 
 test('concurrent snapshot pruning retains protected device snapshots and flush drains maintenance', async () => {

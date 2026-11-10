@@ -10,8 +10,130 @@ function adaptSyncSource(relativePath, source) {
   if (!file.startsWith('main/modules/sync/')) return source
   const patch = (from, to, name) => { source = replaceOnce(source, from, to, `${file}: ${name}`) }
   if (file.endsWith('/server/user/data.ts') || file.endsWith('/snapshotDataManage.ts')) {
-    patch("import { throttle } from '@common/utils/common'", "import { throttle, writeFile, serial } from '@ztools/sync/storage'", 'managed throttle')
+    patch("import { throttle } from '@common/utils/common'", "import { throttle, writeFile, serial, authTransaction, atomicWriteJSON, readAuthJSON } from '@ztools/sync/storage'", 'managed throttle')
     source = source.replaceAll('fs.writeFile(', 'writeFile(')
+  }
+  if (file.endsWith('/server/user/data.ts')) {
+    patch(`const saveServerInfoThrottle = throttle(() => {
+  writeFile(path.join(global.lxDataPath, File.serverDataPath, File.serverInfoJSON), JSON.stringify(serverInfo), (err) => {
+    if (err) console.error(err)
+  })
+})
+let serverInfo: ServerInfo
+export const initServerInfo = async() => {
+  if (serverInfo != null) return
+  const serverInfoFilePath = path.join(global.lxDataPath, File.serverDataPath, File.serverInfoJSON)
+  if (await exists(serverInfoFilePath)) {
+    // eslint-disable-next-line require-atomic-updates
+    serverInfo = JSON.parse((await fs.promises.readFile(serverInfoFilePath)).toString())
+  } else {
+    // eslint-disable-next-line require-atomic-updates
+    serverInfo = {
+      serverId: randomBytes(4 * 4).toString('base64'),
+      version: 2,
+    }
+    const syncDataPath = path.join(global.lxDataPath, File.serverDataPath)
+    if (!await exists(syncDataPath)) {
+      await fs.promises.mkdir(syncDataPath, { recursive: true })
+    }
+    saveServerInfoThrottle()
+  }
+}
+export const getServerId = () => {
+  return serverInfo.serverId
+}
+export const getVersion = async() => {
+  await initServerInfo()
+  return serverInfo.version ?? 1
+}
+export const setVersion = async(version: number) => {
+  await initServerInfo()
+  serverInfo.version = version
+  saveServerInfoThrottle()
+}`, `let serverInfo: ServerInfo | undefined
+let committedServerInfoPath: string | undefined
+const serverInfoPath = () => path.join(global.lxDataPath, File.serverDataPath, File.serverInfoJSON)
+export const initServerInfo = async() => {
+  const file = serverInfoPath()
+  return authTransaction(file, async() => {
+    if (serverInfo && committedServerInfoPath === file) return
+    let next = await readAuthJSON(file)
+    if (!next) {
+      next = { serverId: randomBytes(4 * 4).toString('base64'), version: 2 }
+      await fs.promises.mkdir(path.dirname(file), { recursive: true })
+      await atomicWriteJSON(file, next)
+    }
+    serverInfo = next
+    committedServerInfoPath = file
+  })
+}
+export const getServerId = () => {
+  if (!serverInfo || committedServerInfoPath !== serverInfoPath()) throw new Error('Sync server identity is not committed')
+  return serverInfo.serverId
+}
+export const getVersion = async() => {
+  await initServerInfo()
+  return serverInfo!.version ?? 1
+}
+export const setVersion = async(version: number) => {
+  await initServerInfo()
+  const file = serverInfoPath()
+  return authTransaction(file, async() => {
+    const next = { ...await readAuthJSON(file), version }
+    await atomicWriteJSON(file, next)
+    serverInfo = next
+    committedServerInfoPath = file
+  })
+}`, 'commit server identity before publication')
+    patch('  private readonly saveDevicesInfoThrottle: () => void\n', '', 'remove deferred authentication writer')
+    patch('return Object.values(this.devicesInfo.clients).sort(', 'return Object.values(this.devicesInfo.clients).map(info => ({ ...info })).sort(', 'return detached device list')
+    patch(`  saveClientKeyInfo = (keyInfo: LX.Sync.ServerKeyInfo) => {
+    if (this.devicesInfo.clients[keyInfo.clientId] == null && Object.keys(this.devicesInfo.clients).length > 101) throw new Error('max keys')
+    this.devicesInfo.clients[keyInfo.clientId] = keyInfo
+    this.saveDevicesInfoThrottle()
+  }`, `  private commitClientKeyInfo = (keyInfo: LX.Sync.ServerKeyInfo, existingOnly = false) => {
+    const value = { ...keyInfo }
+    return authTransaction(this.devicesFilePath, async() => {
+      const next: DevicesInfo = await readAuthJSON(this.devicesFilePath, { userName: this.userName, clients: {} })
+      if (existingOnly && !next.clients[value.clientId]) { this.devicesInfo = next; return false }
+      if (next.clients[value.clientId] == null && Object.keys(next.clients).length > 101) throw new Error('max keys')
+      next.clients[value.clientId] = value
+      await atomicWriteJSON(this.devicesFilePath, next)
+      this.devicesInfo = next
+      return true
+    })
+  }
+  saveClientKeyInfo = (keyInfo: LX.Sync.ServerKeyInfo) => this.commitClientKeyInfo(keyInfo)
+  updateClientKeyInfo = (keyInfo: LX.Sync.ServerKeyInfo) => this.commitClientKeyInfo(keyInfo, true)`, 'stage and commit device grants')
+    patch('    return this.devicesInfo.clients[clientId] ?? null', '    const info = this.devicesInfo.clients[clientId]\n    return info ? { ...info } : null', 'prevent metadata mutation before commit')
+    patch(`  removeClientKeyInfo = async(clientId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete this.devicesInfo.clients[clientId]
+    this.saveDevicesInfoThrottle()
+  }`, `  removeClientKeyInfo = (clientId: string) => authTransaction(this.devicesFilePath, async() => {
+    const next: DevicesInfo = await readAuthJSON(this.devicesFilePath, { userName: this.userName, clients: {} })
+    delete next.clients[clientId]
+    await atomicWriteJSON(this.devicesFilePath, next)
+    this.devicesInfo = next
+  })`, 'commit revocation before acknowledgement')
+    patch(`
+    this.saveDevicesInfoThrottle = throttle(() => {
+      writeFile(this.devicesFilePath, JSON.stringify(this.devicesInfo), 'utf8', (err) => {
+        if (err) console.error(err)
+      })
+    })`, '', 'remove deferred device persistence')
+  }
+  if (file.endsWith('/server/server/auth.ts')) {
+    patch('const verifyByKey = (encryptMsg:', 'const verifyByKey = async(encryptMsg:', 'await existing credential metadata')
+    patch(`    if (deviceName != keyInfo.deviceName) {
+      keyInfo.deviceName = deviceName
+      userSpace.dataManage.saveClientKeyInfo(keyInfo)
+    }`, `    keyInfo.deviceName = deviceName
+    if (!await userSpace.dataManage.updateClientKeyInfo(keyInfo)) return null`, 'do not resurrect revoked credentials')
+    patch('const verifyByCode = (encryptMsg:', 'const verifyByCode = async(encryptMsg:', 'await new credential commit')
+    patch('    userSpace.dataManage.saveClientKeyInfo(keyInfo)', '    await userSpace.dataManage.saveClientKeyInfo(keyInfo)', 'commit grant before RSA response')
+    patch('const _msg = typeof userId', 'const _msg = await (typeof userId', 'await authentication outcome')
+    patch(': verifyByCode(req.headers.m, password)', ': verifyByCode(req.headers.m, password))', 'await either authentication method')
   }
   if (file.endsWith('/snapshotDataManage.ts')) {
     patch('  clearOldSnapshot = async() => {', '  clearOldSnapshot = serial(async() => {', 'serialize snapshot maintenance')
@@ -31,8 +153,73 @@ function adaptSyncSource(relativePath, source) {
     patch('  }\n\n  getCurrentListInfoKey', '  }, () => this.snapshotDataManage)\n\n  getCurrentListInfoKey', 'share snapshot creation critical section')
   }
   if (file.endsWith('/client/data.ts')) {
-    patch('    void saveSyncAuthKeys()', '    await saveSyncAuthKeys()', 'persist initial auth state')
-    patch('  void saveSyncAuthKeys()', '  await saveSyncAuthKeys()', 'persist updated auth state')
+    source = "import { authTransaction, atomicWriteJSON, readAuthJSON } from '@ztools/sync/storage'\n" + source
+    patch(`let syncAuthKeys: Record<string, LX.Sync.ClientKeyInfo>
+
+
+const saveSyncAuthKeys = async() => {
+  const syncAuthKeysFilePath = path.join(global.lxDataPath, File.clientDataPath, File.syncAuthKeysJSON)
+  return fs.promises.writeFile(syncAuthKeysFilePath, JSON.stringify(syncAuthKeys), 'utf8')
+}
+
+export const initClientInfo = async() => {
+  if (syncAuthKeys != null) return
+  const syncAuthKeysFilePath = path.join(global.lxDataPath, File.clientDataPath, File.syncAuthKeysJSON)
+  if (await fs.promises.stat(syncAuthKeysFilePath).then(() => true).catch(() => false)) {
+    // eslint-disable-next-line require-atomic-updates
+    syncAuthKeys = JSON.parse((await fs.promises.readFile(syncAuthKeysFilePath)).toString())
+  } else {
+    // eslint-disable-next-line require-atomic-updates
+    syncAuthKeys = {}
+    const syncDataPath = path.join(global.lxDataPath, File.clientDataPath)
+    if (!await exists(syncDataPath)) {
+      await fs.promises.mkdir(syncDataPath, { recursive: true })
+    }
+    void saveSyncAuthKeys()
+  }
+}
+
+export const getSyncAuthKey = async(serverId: string) => {
+  await initClientInfo()
+  return syncAuthKeys[serverId] ?? null
+}
+export const setSyncAuthKey = async(serverId: string, info: LX.Sync.ClientKeyInfo) => {
+  await initClientInfo()
+  syncAuthKeys[serverId] = info
+  void saveSyncAuthKeys()
+}`, `let syncAuthKeys: Record<string, LX.Sync.ClientKeyInfo>
+let committedAuthPath: string | undefined
+const authPath = () => path.join(global.lxDataPath, File.clientDataPath, File.syncAuthKeysJSON)
+export const initClientInfo = async() => {
+  const file = authPath()
+  return authTransaction(file, async() => {
+    if (syncAuthKeys && committedAuthPath === file) return
+    let next = await readAuthJSON(file)
+    if (!next) {
+      next = {}
+      await fs.promises.mkdir(path.dirname(file), { recursive: true })
+      await atomicWriteJSON(file, next)
+    }
+    syncAuthKeys = next
+    committedAuthPath = file
+  })
+}
+export const getSyncAuthKey = async(serverId: string) => {
+  await initClientInfo()
+  const info = syncAuthKeys[serverId]
+  return info ? { ...info } : null
+}
+export const setSyncAuthKey = async(serverId: string, info: LX.Sync.ClientKeyInfo) => {
+  const value = { ...info }
+  await initClientInfo()
+  const file = authPath()
+  return authTransaction(file, async() => {
+    const next = { ...await readAuthJSON(file), [serverId]: value }
+    await atomicWriteJSON(file, next)
+    syncAuthKeys = next
+    committedAuthPath = file
+  })
+}`, 'atomic client identity and pairing transactions')
   }
   if (file === 'main/modules/sync/client/index.ts') {
     patch('let connectId = 0', 'let connectId = 0\nexport const cancelPendingConnect = () => { connectId++ }', 'invalidate pending authentication before queued stop')
@@ -43,6 +230,21 @@ function adaptSyncSource(relativePath, source) {
     patch('    void setSyncAuthKey(serverId, info)', '    await setSyncAuthKey(serverId, info)', 'persist authentication before success')
   }
   if (file.endsWith('/server/server/server.ts')) {
+    patch('  userSpace.dataManage.saveClientKeyInfo(keyInfo)', `  // The key is already committed; expose socket ownership before awaiting its metadata update.
+  socket.keyInfo = keyInfo
+  socket.userInfo = { name: 'default' }
+  if (!await userSpace.dataManage.updateClientKeyInfo(keyInfo).catch(error => { log.warn(error); return false })) {
+    socket.close(SYNC_CLOSE_CODE.failed)
+    return
+  }
+  if (!wss || socket.readyState !== 1) return`, 'commit connection metadata without restoring revoked key')
+    patch('if (client.keyInfo.clientId == clientId)', 'if (client.keyInfo?.clientId == clientId)', 'allow revocation during connection setup')
+    patch('client.keyInfo.clientId != newSocket.keyInfo.clientId', 'client.keyInfo?.clientId != newSocket.keyInfo.clientId', 'ignore unowned sockets during duplicate checks')
+    patch('        void authCode(req, res, status.code)', `        void authCode(req, res, status.code).catch(error => {
+          log.error(error)
+          if (!res.headersSent) res.writeHead(500)
+          res.end(SYNC_CODE.msgAuthFailed)
+        })`, 'return failed auth commit to HTTP caller')
     patch('export const startServer = async(port: number) => {', 'export const startServer = async(port: number, isCurrent: () => boolean = () => true) => {', 'accept host startup generation')
     patch('  await migrateData(global.lxDataPath)\n  await initServerInfo()', '  await migrateData(global.lxDataPath)\n  if (!isCurrent()) return\n  await initServerInfo()\n  if (!isCurrent()) return', 'cancel obsolete server preflight before listening')
     patch("    log.warn(err)\n    return", "    log.warn(err)\n    socket.close(SYNC_CLOSE_CODE.failed)\n    return", 'failed module never becomes connected')

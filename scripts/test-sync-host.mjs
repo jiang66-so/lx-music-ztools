@@ -58,6 +58,85 @@ async function assertPortReleased(port) {
   await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
 }
 
+// Only the affected authentication commit boundaries. Data is read immediately
+// after original business IPC returns, before stop/dispose/flush. The official
+// binary is an unchanged oracle; this driver never implements the wire protocol.
+async function runAuthCommit(environment, output) {
+  const result = { status: 'RUNNING', environment, checks: [], startedAt: new Date().toISOString() }
+  let host, peer
+  const checkpoint = name => { result.checks.push(name); console.log(`PASS auth-commit ${name}`) }
+  try {
+    const { createOfficialPeer } = require('../tests/ztools/fixtures/lx-sync-peer.cjs')
+    peer = await createOfficialPeer()
+    assert.equal(peer.state.version, '2.12.6')
+    result.officialVersion = peer.state.version
+    host = await startHost('dist/lx.html')
+    result.hostData = host.data
+    const invoke = (channel, params) => host.evaluate(`lxHost.invoke(${JSON.stringify(channel)},${JSON.stringify(params)})`)
+    const action = params => invoke('winMain_sync_action', params)
+    const data = await host.evaluate('ztools.getPath("pluginData")')
+    const devicesFile = join(data, 'sync/server/devices.json'), identityFile = join(data, 'sync/server/serverInfo.json')
+    const serverPort = await freePort(), serverAddress = `http://127.0.0.1:${serverPort}`
+    await action({ action: 'enable_server', data: { enable: true, port: String(serverPort) } })
+    const identity = JSON.parse(readFileSync(identityFile, 'utf8'))
+    assert.equal(await (await fetch(serverAddress + '/id')).text(), 'OjppZDo6' + identity.serverId)
+    checkpoint('first server identity is already recoverable when listener succeeds')
+
+    const connectOfficial = authCode => peer.action({ action: 'enable_client', data: { enable: true, host: serverAddress, ...(authCode ? { authCode } : {}) } })
+    const disconnectOfficial = () => peer.action({ action: 'enable_client', data: { enable: false, host: serverAddress } })
+    await connectOfficial((await action({ action: 'get_server_status' })).code)
+    const granted = await invoke('winMain_sync_get_server_devices')
+    assert.equal(granted.length, 1)
+    assert.equal(JSON.parse(readFileSync(devicesFile, 'utf8')).clients[granted[0].clientId].key, granted[0].key)
+    checkpoint('official client authentication returns only after new server key is on disk')
+    await invoke('winMain_sync_remove_server_device', granted[0].clientId)
+    assert.equal(JSON.parse(readFileSync(devicesFile, 'utf8')).clients[granted[0].clientId], undefined)
+    checkpoint('original removeDevice success already excludes revoked key on disk')
+    await disconnectOfficial()
+    await assert.rejects(connectOfficial(), /Auth failed/)
+    checkpoint('unchanged official client cannot authenticate with revoked saved key')
+    await connectOfficial(await action({ action: 'generate_code' }))
+    const replacement = await invoke('winMain_sync_get_server_devices')
+    assert.equal(replacement.length, 1)
+    assert.notEqual(replacement[0].clientId, granted[0].clientId)
+    const persisted = JSON.parse(readFileSync(devicesFile, 'utf8'))
+    assert.equal(persisted.clients[granted[0].clientId], undefined)
+    assert.equal(persisted.clients[replacement[0].clientId].key, replacement[0].key)
+    checkpoint('fresh official pairing persists replacement without restoring old key')
+    await disconnectOfficial()
+    await action({ action: 'enable_server', data: { enable: false, port: String(serverPort) } })
+    await assertPortReleased(serverPort)
+
+    const peerPort = await freePort(), peerAddress = `http://127.0.0.1:${peerPort}`
+    await peer.action({ action: 'enable_server', data: { enable: true, port: String(peerPort) } })
+    const code = (await peer.action({ action: 'get_server_status' })).code
+    await action({ action: 'enable_client', data: { enable: true, host: peerAddress, authCode: code } })
+    const serverId = (await (await fetch(peerAddress + '/id')).text()).replace('OjppZDo6', '')
+    const clientKeys = JSON.parse(readFileSync(join(data, 'sync/client/syncAuthKey.json'), 'utf8'))
+    assert.ok(clientKeys[serverId]?.key)
+    const officialDevices = await peer.invoke('winMain_sync_get_server_devices')
+    assert.equal(officialDevices.find(info => info.clientId === clientKeys[serverId].clientId)?.key, clientKeys[serverId].key)
+    checkpoint('plugin client authentication returns only after local key matches official server')
+    await action({ action: 'enable_client', data: { enable: false, host: peerAddress } })
+    await action({ action: 'enable_client', data: { enable: true, host: peerAddress } })
+    assert.deepEqual(JSON.parse(readFileSync(join(data, 'sync/client/syncAuthKey.json'), 'utf8')), clientKeys)
+    checkpoint('plugin reconnect uses committed local key with unchanged official server')
+    await action({ action: 'enable_client', data: { enable: false, host: peerAddress } })
+    await peer.action({ action: 'enable_server', data: { enable: false, port: String(peerPort) } })
+    await assertPortReleased(peerPort)
+    result.status = 'PASS'
+  } catch (error) {
+    result.status = 'FAIL'; result.error = String(error.stack || error)
+    result.hostLogs = await host?.logs().catch(() => [])
+    throw error
+  } finally {
+    try { await host?.close() } finally { await peer?.close() }
+    result.finishedAt = new Date().toISOString()
+    writeFileSync(join(output, 'auth-commit.json'), JSON.stringify(result, null, 2))
+    console.log(`SYNC_AUTH_COMMIT_EVIDENCE ${join(output, 'auth-commit.json')}`)
+  }
+}
+
 async function runRole(role, environment, output) {
   const result = { role, status: 'RUNNING', environment, startedAt: new Date().toISOString(), checks: [], choices: [] }
   let host, peer, port
@@ -282,6 +361,9 @@ try {
   } else {
     const output = mkdtempSync(join(tmpdir(), 'lx-sync-host-'))
     console.log(`SYNC_HOST_OUTPUT ${output}`)
+    if (process.argv.includes('--auth-commit-only')) {
+      await runAuthCommit(environment, output)
+    } else {
     const roles = process.env.LX_SYNC_ROLE ? [process.env.LX_SYNC_ROLE] : ['client', 'server']
     assert.ok(roles.every(role => ['client', 'server'].includes(role)), 'FAIL: LX_SYNC_ROLE must be client or server')
     const results = []
@@ -296,6 +378,7 @@ try {
     writeFileSync(join(output, 'summary.json'), JSON.stringify({ status, evidence: 'Actual installed ZTools app.asar, original Vue and original Sync IPC, unchanged official LX 2.12.6', results: results.map(({ role, status, summarySha256, checks, error }) => ({ role, status, summarySha256, checks, error })) }, null, 2))
     console.log(`${status} installed-host official Sync interoperability: ${roles.join(', ')}`)
     if (status !== 'PASS') process.exitCode = 1
+    }
   }
 } catch (error) {
   console.error(String(error.stack || error))
