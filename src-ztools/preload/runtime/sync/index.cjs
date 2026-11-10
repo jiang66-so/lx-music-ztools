@@ -55,10 +55,12 @@ function createSync({ bridge = context.bridge } = {}) {
         const url = new URL(config.host)
         if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) sync hosts are supported')
       }
-      await stopNow(); mode = config.mode
+      await stopNow()
+      if (id !== generation || disposed || closing) return getStatus()
+      mode = config.mode
       try {
         if (mode === 'server') {
-          await original.startServer(port)
+          await original.startServer(port, () => id === generation && !disposed && !closing)
           if (!original.getServerStatus().status) throw new Error(original.getServerStatus().message || '同步服务启动失败')
         } else await original.connectServer(config.host, config.authCode)
         if (id !== generation) { await stopNow(); return getStatus() }

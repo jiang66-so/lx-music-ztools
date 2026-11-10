@@ -5,6 +5,7 @@ const errors = []
 const ownerQueues = new WeakMap()
 const latestWrites = new Map()
 const failedWrites = new Map()
+const fileQueues = new Map()
 function track(promise) {
   writes.add(promise)
   promise.then(() => writes.delete(promise), error => { errors.push(error); writes.delete(promise) })
@@ -38,29 +39,50 @@ function throttle(fn, delay = 100) {
     timer = setTimeout(run, delay)
   }
 }
-function performWrite(record) {
+function performWrite(record, retry = false) {
+  if (record.pending) return record.pending
   const { args, callback, file } = record
-  let done
-  const pending = new Promise(resolve => { done = resolve })
-  writes.add(pending)
-  fs.writeFile(...args, error => {
-    if (latestWrites.get(file) === record) {
-      if (error) { record.error = error; failedWrites.set(file, record) }
-      else failedWrites.delete(file)
-    }
-    try { callback(error) } finally { writes.delete(pending); done() }
+  const previous = fileQueues.get(file) || Promise.resolve()
+  const pending = previous.then(() => {
+    // A retry may have waited behind a newer write. Recheck at the actual I/O
+    // boundary, not only when flush captured the failed record.
+    if (retry && latestWrites.get(file) !== record) return
+    return new Promise(resolve => {
+      const finish = error => {
+        if (latestWrites.get(file) === record) {
+          if (error) { record.error = error; failedWrites.set(file, record) }
+          else { failedWrites.delete(file); latestWrites.delete(file) }
+        }
+        try { callback(error) } catch (error) { errors.push(error) }
+        finally { resolve() }
+      }
+      try { fs.writeFile(...args, finish) } catch (error) { finish(error) }
+    })
   })
+  record.pending = pending
+  fileQueues.set(file, pending)
+  writes.add(pending)
+  const complete = () => {
+    writes.delete(pending); record.pending = null
+    if (fileQueues.get(file) === pending) fileQueues.delete(file)
+  }
+  pending.then(complete, error => { errors.push(error); complete() })
+  return pending
 }
 function writeFile(...args) {
   const callback = args.pop()
   const record = { args, callback, file: String(args[0]), error: null }
   latestWrites.set(record.file, record)
+  failedWrites.delete(record.file)
   performWrite(record)
 }
 async function flush() {
   // Retry only failures from an earlier attempt. A newly failed write is kept
   // for the next explicit flush, so an unavailable disk cannot spin forever.
-  for (const record of [...failedWrites.values()]) performWrite(record)
+  for (const [file, record] of [...failedWrites]) {
+    if (latestWrites.get(file) !== record) { failedWrites.delete(file); continue }
+    performWrite(record, true)
+  }
   while (timers.size || writes.size) {
     for (const run of [...timers.keys()]) run()
     await Promise.allSettled([...writes])

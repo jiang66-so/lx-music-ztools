@@ -36,12 +36,15 @@ function adaptSyncSource(relativePath, source) {
   }
   if (file === 'main/modules/sync/client/index.ts') {
     patch('let connectId = 0', 'let connectId = 0\nexport const cancelPendingConnect = () => { connectId++ }', 'invalidate pending authentication before queued stop')
+    patch('  await migrateData(global.lxDataPath)\n\n  return handleConnect', '  await migrateData(global.lxDataPath)\n  if (id != connectId) return\n\n  return handleConnect', 'preserve connection generation across migration')
   }
   if (file.endsWith('/client/auth.ts')) {
     patch("  console.log('connect: ', urlInfo.href, authCode)", "  // Credentials never enter host logs.", 'redact authentication code')
     patch('    void setSyncAuthKey(serverId, info)', '    await setSyncAuthKey(serverId, info)', 'persist authentication before success')
   }
   if (file.endsWith('/server/server/server.ts')) {
+    patch('export const startServer = async(port: number) => {', 'export const startServer = async(port: number, isCurrent: () => boolean = () => true) => {', 'accept host startup generation')
+    patch('  await migrateData(global.lxDataPath)\n  await initServerInfo()', '  await migrateData(global.lxDataPath)\n  if (!isCurrent()) return\n  await initServerInfo()\n  if (!isCurrent()) return', 'cancel obsolete server preflight before listening')
     patch("    log.warn(err)\n    return", "    log.warn(err)\n    socket.close(SYNC_CLOSE_CODE.failed)\n    return", 'failed module never becomes connected')
     patch("httpServer.on('error', error => {\n    console.log(error)\n    reject(error)", "httpServer.on('error', error => {\n    clearInterval(interval)\n    wss?.close()\n    wss = null\n    for (const socket of sockets) socket.destroy()\n    sockets.clear()\n    reject(error)", 'startup failure cleanup')
     patch(`const handleStopServer = async() => new Promise<void>((resolve, reject) => {

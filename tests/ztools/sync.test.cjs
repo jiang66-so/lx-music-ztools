@@ -238,3 +238,116 @@ test('dispose always removes subscriptions after flush failure and retries the u
     await storage.flush(); await runtime.dispose()
   }
 })
+
+for (const ordering of ['new-before-flush', 'flush-before-new']) test(`flush never retries superseded failed metadata (${ordering})`, async () => {
+  const fs = require('node:fs')
+  const storage = require('../../src-ztools/preload/runtime/sync/storage.cjs')
+  const target = join(mkdtempSync(join(tmpdir(), 'lx-sync-retry-order-')), 'devices.json')
+  const originalWrite = fs.writeFile
+  const issued = [], pending = []
+  let failed = false
+  fs.writeFile = (...args) => {
+    if (String(args[0]) !== target) return originalWrite(...args)
+    const callback = args.pop()
+    if (!failed) { failed = true; queueMicrotask(() => callback(Object.assign(new Error('injected ENOSPC'), { code: 'ENOSPC' }))); return }
+    issued.push(String(args[1]))
+    pending.push(() => new Promise(resolve => originalWrite(...args, error => { callback(error); resolve() })))
+  }
+  try {
+    await new Promise(resolve => storage.writeFile(target, 'old-state', error => { if (error) assert.equal(error.code, 'ENOSPC'); resolve() }))
+    await new Promise(resolve => setImmediate(resolve))
+    let flushing
+    if (ordering === 'flush-before-new') flushing = storage.flush()
+    storage.writeFile(target, 'new-state', () => {})
+    if (!flushing) flushing = storage.flush()
+    await new Promise(resolve => setImmediate(resolve))
+    // Real filesystem writes complete in the exact bad order: B first, then any
+    // stale A that flush incorrectly submitted behind B.
+    while (pending.length) { await pending.shift()(); await new Promise(resolve => setImmediate(resolve)) }
+    await flushing
+    assert.deepEqual(issued, ['new-state'], 'the obsolete failed A must never be submitted after B')
+    assert.equal(fs.readFileSync(target, 'utf8'), 'new-state')
+  } finally { fs.writeFile = originalWrite; await storage.flush() }
+})
+
+test('actual writes to one metadata file finish in submission order', async () => {
+  const fs = require('node:fs')
+  const storage = require('../../src-ztools/preload/runtime/sync/storage.cjs')
+  const target = join(mkdtempSync(join(tmpdir(), 'lx-sync-file-queue-')), 'devices.json')
+  const originalWrite = fs.writeFile
+  const pending = [], issued = []
+  fs.writeFile = (...args) => {
+    if (String(args[0]) !== target) return originalWrite(...args)
+    const callback = args.pop()
+    issued.push(String(args[1]))
+    pending.push(() => new Promise(resolve => originalWrite(...args, error => { callback(error); resolve() })))
+  }
+  try {
+    storage.writeFile(target, 'first', () => {})
+    storage.writeFile(target, 'latest', () => {})
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(issued, ['first'], 'the second actual fs.writeFile must wait for the first callback')
+    while (pending.length) { await pending.shift()(); await new Promise(resolve => setImmediate(resolve)) }
+    await storage.flush()
+    assert.deepEqual(issued, ['first', 'latest'])
+    assert.equal(fs.readFileSync(target, 'utf8'), 'latest')
+  } finally {
+    while (pending.length) { await pending.shift()(); await new Promise(resolve => setImmediate(resolve)) }
+    fs.writeFile = originalWrite; await storage.flush()
+  }
+})
+
+test('stop during server migration prevents an obsolete listener from becoming ready', async () => {
+  const migration = require('../../src-ztools/preload/upstream/main/modules/sync/migrate.cjs')
+  const original = migration.default
+  const { WIN_MAIN_RENDERER_EVENT_NAME: names } = require('../../src-ztools/preload/upstream/common/ipcNames.cjs')
+  const bridge = createBridge()
+  const runtime = initializeRuntime({ bridge, directory: mkdtempSync(join(tmpdir(), 'lx-sync-server-preflight-')) })
+  const reservation = http.createServer(); reservation.listen(0, '0.0.0.0'); await once(reservation, 'listening')
+  const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve))
+  let entered, release, wasReady = false
+  const preparing = new Promise(resolve => { entered = resolve })
+  const barrier = new Promise(resolve => { release = resolve })
+  migration.default = async (...args) => { entered(); await barrier; return original(...args) }
+  const off = bridge.subscribe(names.sync_action, event => { if (event.action === 'server_status' && event.data.status) wasReady = true })
+  try {
+    const starting = runtime.sync.start({ mode: 'server', port })
+    await preparing
+    const stopping = runtime.sync.stop(); release()
+    await Promise.all([starting, stopping])
+    assert.equal(wasReady, false, 'cancelled preflight must not open and publish a listener before queued stop')
+  } finally { release(); migration.default = original; off(); await runtime.dispose() }
+})
+
+for (const stage of ['preflight flush', 'client migration']) test(`stop during ${stage} prevents a superseded start from issuing fresh authentication`, { timeout: 5000 }, async () => {
+  const storage = require('../../src-ztools/preload/runtime/sync/storage.cjs')
+  const migration = require('../../src-ztools/preload/upstream/main/modules/sync/migrate.cjs')
+  const owner = stage === 'preflight flush' ? storage : migration
+  const method = stage === 'preflight flush' ? 'flush' : 'default'
+  const original = owner[method]
+  const server = http.createServer(() => {})
+  const sockets = new Set()
+  let requests = 0, entered, release, paused = false
+  server.on('request', () => { requests++ })
+  server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)) })
+  server.listen(0, '127.0.0.1'); await once(server, 'listening')
+  const runtime = initializeRuntime({ bridge: createBridge(), directory: mkdtempSync(join(tmpdir(), 'lx-sync-preflight-')) })
+  const barrier = new Promise(resolve => { release = resolve })
+  const preparing = new Promise(resolve => { entered = resolve })
+  owner[method] = async (...args) => { if (!paused) { paused = true; entered(); await barrier } return original(...args) }
+  const starting = runtime.sync.start({ mode: 'client', host: `http://127.0.0.1:${server.address().port}` }).catch(error => error)
+  await preparing
+  const stopping = runtime.sync.stop()
+  release()
+  let timely
+  try {
+    timely = await Promise.race([stopping.then(() => true), new Promise(resolve => setTimeout(() => resolve(false), 150))])
+  } finally {
+    owner[method] = original
+    for (const socket of sockets) socket.destroy()
+    await starting; await stopping; await runtime.dispose()
+    await new Promise(resolve => server.close(resolve))
+  }
+  assert.equal(requests, 0, 'requestStartedAfterStop must remain false')
+  assert.equal(timely, true, 'stop must not wait for authentication that began after cancellation')
+})
