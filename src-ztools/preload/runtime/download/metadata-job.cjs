@@ -26,9 +26,13 @@ async function write({ filePath, ext, meta, cover }) {
     } finally { await fs.promises.rm(output, { force: true }) }
   }
   const after = await parseFile(filePath)
-  if (after.common.title !== meta.title || after.common.album !== meta.album || !after.format.duration || before.format.duration && Math.abs(after.format.duration - before.format.duration) > 0.05) throw new Error('标签回读或音频时长验证失败')
+  // Empty ID3 frames may be omitted by the writer/parser; absent and empty are
+  // the same requested value, while nonempty text must still match exactly.
+  const title = after.common.title ?? ''
+  const album = after.common.album ?? ''
+  if (title !== (meta.title ?? '') || album !== (meta.album ?? '') || !after.format.duration || before.format.duration && Math.abs(after.format.duration - before.format.duration) > 0.05) throw new Error('标签回读或音频时长验证失败')
   const handle = await fs.promises.open(filePath, 'r+')
   try { await handle.sync() } finally { await handle.close() }
-  return { duration: after.format.duration, title: after.common.title, album: after.common.album }
+  return { duration: after.format.duration, title, album }
 }
 module.exports = { write }
