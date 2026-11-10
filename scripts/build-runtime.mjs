@@ -31,6 +31,16 @@ function compile(input) {
     writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
     return target
   }
+  if (input === resolve(source, 'main/modules/winMain/index.ts')) {
+    const adapter = relative(dirname(target), resolve('src-ztools/preload/runtime/win-main.cjs')).replaceAll('\\', '/')
+    writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
+    return target
+  }
+  if (input === resolve(source, 'main/utils/request.ts')) {
+    const adapter = relative(dirname(target), resolve('src-ztools/preload/runtime/sync/request.cjs')).replaceAll('\\', '/')
+    writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
+    return target
+  }
   if (input === resolve(source, 'renderer/store/index.ts')) {
     const adapter = relative(dirname(target), resolve('src-ztools/preload/runtime/proxy.cjs')).replaceAll('\\', '/')
     writeFileSync(target, `module.exports=require(${JSON.stringify(adapter)})\n`)
@@ -54,8 +64,8 @@ function compile(input) {
     return `require(${JSON.stringify(spec)})`
   })
   const contextModule = relative(dirname(target), resolve('src-ztools/preload/runtime/context.cjs')).replaceAll('\\', '/')
-  writeFileSync(target, `// Readable LX source adaptation. Upstream 323e4bac; Apache-2.0.\nconst lxRuntimeContext=require(${JSON.stringify(contextModule)});\n${result.replace(/global\.lx\b/g, 'lxRuntimeContext.lx').replaceAll('process.versions.app', JSON.stringify('2.12.6')).replace("console.log('---start---', url);", '')}`)
+  writeFileSync(target, `// Readable LX source adaptation. Upstream 323e4bac; Apache-2.0.\nconst lxRuntimeContext=require(${JSON.stringify(contextModule)});\n${result.replace(/global\.lxDataPath\b/g, 'lxRuntimeContext.lx.dataPath').replace(/global\.lx\b/g, 'lxRuntimeContext.lx').replaceAll('process.versions.app', JSON.stringify('2.12.6')).replace("console.log('---start---', url);", '')}`)
   return target
 }
-for (const entry of ['main/worker/dbService/modules/index.ts', 'main/worker/dbService/tables.ts', 'main/worker/dbService/migrate.ts', 'common/defaultSetting.ts', 'common/defaultHotKey.ts', 'common/utils/nodejs.ts', 'common/theme/index.json', 'common/ipcNames.ts', 'main/event/index.ts', 'main/modules/commonRenderers/list/rendererEvent.ts', 'main/modules/commonRenderers/list/winRendererEvent.ts', 'main/modules/commonRenderers/dislike/rendererEvent.ts', 'main/modules/commonRenderers/dislike/winRendererEvent.ts', 'main/modules/winMain/rendererEvent/music.ts', 'main/modules/winMain/rendererEvent/download.ts', 'renderer/utils/request.js', 'renderer/worker/main/common.ts', 'renderer/worker/main/list.ts', 'renderer/worker/main/music.ts']) compile(resolve(source, entry))
+for (const entry of ['main/worker/dbService/modules/index.ts', 'main/worker/dbService/tables.ts', 'main/worker/dbService/migrate.ts', 'common/defaultSetting.ts', 'common/defaultHotKey.ts', 'common/utils/nodejs.ts', 'common/theme/index.json', 'common/ipcNames.ts', 'main/event/index.ts', 'main/modules/commonRenderers/list/rendererEvent.ts', 'main/modules/commonRenderers/list/winRendererEvent.ts', 'main/modules/commonRenderers/dislike/rendererEvent.ts', 'main/modules/commonRenderers/dislike/winRendererEvent.ts', 'main/modules/winMain/rendererEvent/music.ts', 'main/modules/winMain/rendererEvent/download.ts', 'renderer/utils/request.js', 'renderer/worker/main/common.ts', 'renderer/worker/main/list.ts', 'renderer/worker/main/music.ts', 'main/modules/openApi/index.ts', 'renderer/worker/download/utils.ts', 'renderer/worker/download/lrcTool.ts', 'common/utils/musicMeta/flac-metadata/index.js', 'common/utils/migrateSetting.ts', 'main/modules/sync/index.ts']) compile(resolve(source, entry))
 console.log(`Adapted ${built.size} readable LX runtime modules (no bundling/minification)`)

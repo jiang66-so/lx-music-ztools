@@ -61,4 +61,4 @@ globalThis.onmessage = async ({ data }) => {
     }
   } catch (error) { reply({ type: initialized ? 'error' : 'init-error', error: String(error.message || error) }) }
 }
-globalThis.addEventListener('unhandledrejection', event => { if (!initialized) reply({ type: 'init-error', error: String(event.reason?.message || event.reason) }) })
+globalThis.addEventListener('unhandledrejection', event => { reply({ type: initialized ? 'error' : 'init-error', error: String(event.reason?.message || event.reason) }) })

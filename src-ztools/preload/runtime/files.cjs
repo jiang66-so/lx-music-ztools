@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { createKV } = require('./kv.cjs')
+const { randomUUID } = require('node:crypto')
 
 /** Resolve existing ancestors so path traversal and symlinks cannot escape a grant. */
 function canonical(target) {
@@ -35,6 +36,17 @@ function createFileService(database, directory) {
   const helpers = require('../upstream/common/utils/nodejs.cjs')
   const paths = new Set(['checkPath', 'checkAndCreateDir', 'getFileStats', 'createDir', 'removeFile', 'readFile', 'saveLxConfigFile', 'readLxConfigFile', 'saveStrToFile', 'copyFile', 'moveFile'])
   const pure = new Set(['gzipData', 'gunzipData'])
+  async function atomicWrite(target, content) {
+    target = scope.authorize(target)
+    // A selected single-file capability also permits this operation's own random
+    // sibling, without granting the renderer access to the surrounding directory.
+    const temp = path.join(path.dirname(target), `.lx-export-${randomUUID()}.tmp`)
+    try {
+      const handle = await fs.promises.open(temp, 'wx')
+      try { await handle.writeFile(content); await handle.sync() } finally { await handle.close() }
+      await fs.promises.rename(temp, scope.authorize(target))
+    } finally { await fs.promises.rm(temp, { force: true }) }
+  }
   return {
     scope,
     async call(method, args) {
@@ -49,9 +61,10 @@ function createFileService(database, directory) {
       if (method === 'saveLxConfigFile') {
         const target = values[0].endsWith('.lxmc') ? values[0] : values[0] + '.lxmc'
         const content = await helpers.gzipData(JSON.stringify(values[1]))
-        await fs.promises.writeFile(target, content)
+        await atomicWrite(target, content)
         return
       }
+      if (method === 'saveStrToFile') return atomicWrite(values[0], values[1])
       const result = await helpers[method](...values)
       if (method === 'getFileStats' && result) return { size: result.size, mtimeMs: result.mtimeMs, ctimeMs: result.ctimeMs, mtime: result.mtime, ctime: result.ctime, isFile: result.isFile(), isDirectory: result.isDirectory() }
       return result

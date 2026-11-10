@@ -34,6 +34,9 @@ module.exports = {
     modules: [path.join(root, 'node_modules'), 'node_modules'],
     fallback: { vm: false, crypto: require.resolve('crypto-browserify'), stream: require.resolve('stream-browserify'), buffer: require.resolve('buffer/'), events: require.resolve('events/'), path: require.resolve('path-browserify'), querystring: require.resolve('querystring-es3') } },
   module: { rules: [
+    { test: /store[\\/]download[\\/]action\.ts$/, enforce: 'pre', use: path.join(__dirname, 'download-loader.cjs') },
+    { test: /SettingBackup\.vue$/, enforce: 'pre', use: path.join(__dirname, 'backup-loader.cjs') },
+    { test: /useMediaDevice\.ts$/, enforce: 'pre', use: path.join(__dirname, 'media-device-loader.cjs') },
     { test: /\.vue$/, loader: 'vue-loader', options: { compilerOptions: { whitespace: 'preserve' } } },
     { test: /\.ts$/, loader: 'ts-loader', options: { transpileOnly: true, appendTsSuffixTo: [/\.vue$/], configFile: path.join(root, 'tsconfig.json'), compilerOptions: { noEmit: false, allowImportingTsExtensions: false, module: 'ESNext' } },
       parser: { worker: ['*audioContext.audioWorklet.addModule()', '...'] } },

@@ -1,12 +1,16 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { createKV } = require('./kv.cjs')
+const { parseFile } = require('./metadata-parser.cjs')
+require('./encodings.cjs')
 const { CMMON_EVENT_NAME, WIN_MAIN_RENDERER_EVENT_NAME: names } = require('../upstream/common/ipcNames.cjs')
 
 /** Translate native dialogs and selected-file capabilities through public ZTools APIs. */
 function bindHost({ bridge, files, database, directory, ztools, clipboard }) {
   const host = () => { if (!ztools) throw new Error('ZTools host is unavailable'); return ztools }
   const store = createKV(database, 'host')
+  bridge.register('metadata:parseFile', ([file, options]) => parseFile(files.scope.authorize(file), options))
+  bridge.register('host:openDirectory', file => host().shellShowItemInFolder(files.scope.authorize(file)))
   bridge.register(names.show_select_dialog, async options => {
     const paths = await host().showOpenDialog(options)
     for (const file of paths || []) files.scope.grant(file, fs.statSync(file).isDirectory())
