@@ -8,7 +8,7 @@
 | 原 main 初始化/AppEvent/global.lx | `preload/runtime/index.cjs`、`context.cjs`、原 `upstream/main/event/index.cjs` | 插件单独上下文，不装载整套LX主进程；与renderer状态分离 |
 | 设置、列表/下载记录/不喜欢/歌词/URL/换源数据 | `runtime/settings.cjs`、`data.cjs`、`database.cjs` 与 upstream SQL模块 | 同一设备本地SQLite，事务回滚/重开；不使用账号云db替代事务 |
 | 原renderer/main/worker/main | `src/ztools/entry.ts`、`worker.ts`、`runtime/worker-main.cjs` | 原UI/业务方法保留；Node/文件/数据库经可信preload |
-| 原musicSdk/request/crypto/dns | `src/ztools/request.ts`、`runtime/network.cjs` 及浏览器纯计算适配 | 原平台请求构造、可取消HTTP、同步工具；受控五平台与当时LIVE搜索分别记录 |
+| 原musicSdk/request/crypto/dns | `src/ztools/request.ts`、`runtime/network.cjs`及浏览器纯计算适配 | 目录SDK沿用原JSON策略；标准源requestSource独立保留原Needle默认编码、回调/取消及Buffer区别；同步工具/五平台受控与LIVE分别记录 |
 | UserApi hidden BrowserWindow | `runtime/source/`、独立CSP浏览器Worker | 原API2.0.0导入/管理/初始化，DOM依赖限制；真实脚本不入仓 |
 | 原音频引擎/core/player | `src/ztools/player.js`、`runtime/player.cjs` | 原audio与DSP保留，状态/控制一份；本地格式与后台受控验收 |
 | 原主题/setTheme | `src/ztools/theme.js`、host-theme.cjs、entry.ts | 原手动/自动主题；公开宿主深浅色通知；活动样式位于懒加载默认样式之后，防止选中主题被默认配色覆盖 |

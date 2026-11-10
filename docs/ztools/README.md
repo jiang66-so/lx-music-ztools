@@ -12,6 +12,7 @@
 | [上游差异与许可](upstream-diff.md) | 保留原 UI/协议的方式、依赖、许可、打包范围 |
 | [验证回执](verification-report.md) | 最终ZIP、自动检查、实际宿主、用户源和长测的具体结果 |
 | [实施取舍](implementation-decisions.md) | 本次已作的技术决定、理由和代价 |
+| [审查与修复](review-report.md) | 全分支发现、三项最终修复及独立复核结论 |
 
 判定口径：**已实现**表示代码接通；**受控 PASS**表示本地合成数据/响应通过；**实际宿主 PASS**表示在指定版本的真实 ZTools app.asar 中运行；**外部 LIVE PASS**只表示当时的指定真实样本通过。四者不能互相替代。`FAIL` 保留已观察失败，`待验`/`BLOCKED` 不计通过。
 

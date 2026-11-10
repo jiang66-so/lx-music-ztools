@@ -10,7 +10,7 @@
 
 结构化数据换成宿主pluginData中的内置node:sqlite；设置/列表同一事务；不依赖ZTools云db。用户源从原桌面隐藏窗口执行改为隔离CSP浏览器Worker，HTTP/取消走受控桥；DOM依赖脚本存在明确兼容限制。真实宿主不支持Node Worker的metadata执行路径用公开隐藏窗口替代，只运行可信标签代码。
 
-下载增加阶段持久化、资源与inode归属校验、同名保护、Range/validator验证、有界重试和最终化ACK。metadata原子rename后fingerprint未落盘的窄窗保守保留文件并报告ownership错误。所有新下载需目标文件系统支持hard link。同步保留wire和原merge算法，适配生命周期/取消/落盘失败/快照队列；list/dislike不是跨模块分布式原子事务，认证/快照JSON也不宣称fsync级崩溃一致性。
+下载增加阶段持久化、资源与inode归属校验、同名保护、Range/validator验证、有界重试和最终化ACK。metadata原子rename后fingerprint未落盘的窄窗保守保留文件并报告ownership错误。所有新下载需目标文件系统支持hard link。同步保留wire和原merge算法，适配生命周期/取消/落盘失败/快照队列；认证新增/撤销/首次identity及客户端key使用同目录临时文件、file.sync、rename，提交后才发布内存和成功ACK，失败保留旧态，旧metadata不能复活已撤销key。list/dislike不是跨模块分布式原子事务；普通快照的节流/重试与认证事务分开，不宣称磁盘硬件断电保证。
 
 窗口尺寸/全屏/托盘/更新由ZTools管理；歌词窗口走公开BrowserWindow代理；快捷键走宿主指令和设置。任务栏缩略图按钮、独立电源锁、状态栏歌词和系统全屏自动隐藏不提供有效实现。输出设备枚举缺失时只能系统默认输出。全部默认设置见 [逐项映射](settings-map.md)。
 
