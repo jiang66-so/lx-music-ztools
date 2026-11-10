@@ -13,9 +13,13 @@ async function call(target, method, ...args) {
   return result
 }
 function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
-  let current, closed = false, reconcilingBounds = false, queue = Promise.resolve(), lastOperation = queue, revision = 0, poll
+  let current, closed = false, reconcilingBounds = false, queue = Promise.resolve(), lastOperation = queue, revision = 0, poll, polling, operations = 0
   const report = error => bridge.emit('bridge:error', { channel: 'desktopLyrics', message: String(error.message || error) })
-  const serial = operation => { const next = queue.then(operation); lastOperation = next; revision++; queue = next.catch(report); return next }
+  const serial = operation => {
+    operations++; revision++
+    const next = queue.then(operation).finally(() => { operations--; revision++ })
+    lastOperation = next; queue = next.catch(report); return next
+  }
   const send = (channel, params, target = current) => target && call(target.window.webContents, 'send', CHILD, { session: target.session, kind: 'event', channel, params })
   function bounds(setting, original) {
     const width = Math.max(38, Number(setting['desktopLyric.width']) || 450), height = Math.max(38, Number(setting['desktopLyric.height']) || 100)
@@ -116,17 +120,22 @@ function createWindows({ bridge, ipcRenderer, ztools, lx, ready = false }) {
   })
   poll = setInterval(() => {
     const target = current
-    if (!target) return
+    if (!target || closed || polling === target || operations) return
+    const observedRevision = revision
+    const valid = () => !closed && current === target && revision === observedRevision && !operations
+    polling = target
     void call(target.window, 'isDestroyed').then(async destroyed => {
-      if (destroyed && current === target) { current = null; bridge.emit('lyric:port:disconnect'); lx.event_app.update_config({ 'desktopLyric.enable': false }) }
+      if (!valid()) return
+      if (destroyed) { current = null; bridge.emit('lyric:port:disconnect'); lx.event_app.update_config({ 'desktopLyric.enable': false }) }
       else if (!destroyed) {
         if (lx.appSetting['desktopLyric.isAlwaysOnTop'] && lx.appSetting['desktopLyric.isAlwaysOnTopLoop']) await call(target.window, 'moveTop')
+        if (!valid()) return
         const rectangle = await call(target.window, 'getBounds')
-        if (closed || current !== target) return
+        if (!valid()) return
         const patch = Object.fromEntries(['x', 'y', 'width', 'height'].filter(key => rectangle[key] !== lx.appSetting['desktopLyric.' + key]).map(key => ['desktopLyric.' + key, rectangle[key]]))
         if (Object.keys(patch).length) lx.event_app.update_config(patch)
       }
-    }).catch(report)
+    }).catch(report).finally(() => { if (polling === target) polling = null })
   }, 500)
   poll.unref?.()
   const service = {

@@ -130,3 +130,77 @@ test('an older failed resize cannot overwrite a newer successful resize', async 
   assert.equal(win.bounds.width, 800)
   assert.equal(x.lx.appSetting['desktopLyric.width'], 800)
 })
+
+function capturePoll(t) {
+  let tick
+  t.mock.method(global, 'setInterval', callback => { tick = callback; return { unref() {} } })
+  return () => tick()
+}
+const turn = () => new Promise(resolve => setImmediate(resolve))
+
+test('an older bounds poll cannot roll back a successful resize RPC', async t => {
+  const tick = capturePoll(t), x = fixture(t)
+  await x.service.openLyrics()
+  const win = x.windows[0], session = new URL(win.url, 'file:///').searchParams.get('session')
+  const old = { ...win.bounds }, get = win.getBounds.bind(win)
+  let release, reads = 0
+  win.getBounds = () => ++reads === 1 ? new Promise(resolve => { release = () => resolve(old) }) : get()
+  tick(); await turn()
+  x.ipcRenderer.emit(PARENT, { senderId: 42 }, { session, kind: 'invoke', id: 'resize-during-poll', channel: names.set_win_bounds, params: { x: 0, y: 0, w: 700, h: 120 } })
+  await turn()
+  assert.equal(x.calls.map(call => call[1]).find(packet => packet?.id === 'resize-during-poll')?.error, undefined)
+  assert.equal(win.bounds.width, 700)
+  release(); await turn(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 700)
+  assert.equal(win.bounds.width, 700)
+})
+
+test('bounds polling coalesces ticks and skips reads during pending host operations', async t => {
+  const tick = capturePoll(t), x = fixture(t)
+  await x.service.openLyrics()
+  const win = x.windows[0], get = win.getBounds.bind(win)
+  let release, reads = 0
+  win.getBounds = () => { reads++; return new Promise(resolve => { release = () => resolve({ ...get(), width: 610 }) }) }
+  tick(); await turn(); tick(); tick(); await turn()
+  assert.equal(reads, 1, 'overlapping poll RPCs must coalesce instead of completing out of order')
+  release(); await turn(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 610)
+  win.getBounds = get
+  const set = win.setBounds.bind(win)
+  let complete
+  win.setBounds = bounds => new Promise(resolve => { complete = () => { set(bounds); resolve() } })
+  x.lx.event_app.update_config({ 'desktopLyric.width': 720 })
+  await turn(); tick(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 720, 'poll must not publish pre-operation bounds while setBounds is pending')
+  complete(); await turn()
+})
+
+for (const action of ['closeLyrics', 'dispose']) test(`pending bounds poll cannot mutate settings after ${action}`, async t => {
+  const tick = capturePoll(t), x = fixture(t)
+  await x.service.openLyrics()
+  const win = x.windows[0], oldWidth = x.lx.appSetting['desktopLyric.width']
+  let release
+  win.getBounds = () => new Promise(resolve => { release = () => resolve({ ...win.bounds, width: 810 }) })
+  tick(); await turn()
+  await x.service[action]()
+  release(); await turn(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], oldWidth)
+  assert.equal(x.service.getStatus().open, false)
+  assert.equal(win.dead, true)
+})
+
+test('a replacement lyric window can poll while an obsolete window read is still pending', async t => {
+  const tick = capturePoll(t), x = fixture(t)
+  await x.service.openLyrics()
+  const old = x.windows[0]
+  let release
+  old.getBounds = () => new Promise(resolve => { release = () => resolve({ ...old.bounds, width: 810 }) })
+  tick(); await turn(); await x.service.closeLyrics(); await x.service.openLyrics()
+  const current = x.windows[1]
+  current.bounds = { ...current.bounds, width: 620 }
+  tick(); await turn(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 620)
+  release(); await turn(); await turn()
+  assert.equal(x.lx.appSetting['desktopLyric.width'], 620)
+  assert.equal(current.bounds.width, 620)
+})
