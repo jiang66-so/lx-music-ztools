@@ -21,7 +21,7 @@ export interface NetworkRequestOptions {
   id?: string
   method?: string
   headers?: Record<string, string>
-  body?: string | Uint8Array
+  body?: string | Uint8Array | ArrayBuffer | Record<string, unknown>
   form?: Record<string, unknown>
   formData?: Record<string, unknown>
   timeout?: number
@@ -38,6 +38,7 @@ export interface HttpResponse {
 }
 export interface NetworkService {
   request(options: NetworkRequestOptions): { id: string; result: Promise<HttpResponse>; cancel(): void }
+  requestSource(options: Pick<NetworkRequestOptions, 'url' | 'id' | 'method' | 'headers' | 'body' | 'form' | 'formData' | 'timeout'>): { id: string; result: Promise<HttpResponse>; cancel(): void }
   cancel(id: string): void
   inspect(): { pending: number }
   dispose(): void

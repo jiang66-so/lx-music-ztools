@@ -67,7 +67,14 @@ class SourceSession {
     if (this.http.has(id)) return
     const options = message.options && typeof message.options === 'object' ? message.options : {}
     const safe = Object.fromEntries(['method', 'headers', 'body', 'form', 'formData', 'timeout'].filter(key => Object.hasOwn(options, key)).map(key => [key, options[key]]))
-    const request = this.network.request({ ...safe, url: message.url, id })
+    for (const path of Array.isArray(message.bufferPaths) ? message.bufferPaths : []) {
+      if (!Array.isArray(path) || !['body', 'form', 'formData'].includes(path[0]) || path.some(key => typeof key !== 'string')) continue
+      let owner = safe
+      for (const key of path.slice(0, -1)) owner = owner && Object.hasOwn(owner, key) ? owner[key] : null
+      const key = path.at(-1), value = owner && Object.hasOwn(owner, key) ? owner[key] : null
+      if (ArrayBuffer.isView(value)) owner[key] = Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+    }
+    const request = this.network.requestSource({ ...safe, url: message.url, id })
     this.http.add(id)
     request.result.then(response => this.send({ type: 'http-response', id: message.id, response }), error => this.send({ type: 'http-response', id: message.id, error: error.message })).finally(() => this.http.delete(id))
   }

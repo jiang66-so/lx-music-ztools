@@ -33,7 +33,7 @@ function createAPI(info) {
       if (typeof callback !== 'function') throw new TypeError('HTTP callback is required')
       const id = String(++nextHttpId)
       callbacks.set(id, callback)
-      reply({ type: 'http', id, url, options })
+      reply({ type: 'http', id, url, options, bufferPaths: protocol.collectRequestBuffers(options, Buffer.isBuffer) })
       return () => { if (!callbacks.has(id)) return; callbacks.delete(id); reply({ type: 'http-cancel', id }) }
     },
   }
