@@ -43,15 +43,37 @@ const endDownloadStop = (id: string) => {
   replace('const handleStartTask = async(downloadInfo: LX.Download.ListItem) => {', `const handleStartTask = async(downloadInfo: LX.Download.ListItem) => {
   const epoch = downloadEpochs.get(downloadInfo.id)
   const isCurrent = () => downloadEpochs.get(downloadInfo.id) === epoch && downloadList.includes(downloadInfo)`)
+  replace('    const url = await getUrl(downloadInfo)\n    if (!url)', '    const url = await getUrl(downloadInfo)\n    if (!isCurrent()) return\n    if (!url)')
   replace('    if (downloadInfo.status != DOWNLOAD_STATUS.RUN) return', '    if (!isCurrent() || downloadInfo.status != DOWNLOAD_STATUS.RUN) return')
   replace('    setUrl(downloadInfo, url)\n    if (!isCurrent()', '    if (!isCurrent()) return\n    setUrl(downloadInfo, url)\n    if (!isCurrent()')
   replace('const handleRefreshUrl = (downloadInfo: LX.Download.ListItem) => {', 'const handleRefreshUrl = (downloadInfo: LX.Download.ListItem, isCurrent: () => boolean) => {')
   replace('      setUrl(downloadInfo, url)', '      if (!isCurrent()) return\n      setUrl(downloadInfo, url)')
-  replace('      handleError(downloadInfo, err.message)', '      if (!isCurrent()) return\n      handleError(downloadInfo, err.message)')
+  replace('      console.log(err)\n      handleError(downloadInfo, err.message)', '      if (!isCurrent()) return\n      console.log(err)\n      handleError(downloadInfo, err.message)')
   replace('        handleRefreshUrl(downloadInfo)', '        handleRefreshUrl(downloadInfo, isCurrent)')
+  replace('      void window.lx.worker.download.updateUrl(downloadInfo.id, url)', '      return window.lx.worker.download.updateUrl(downloadInfo.id, url)')
+  replace(`const handleError = (downloadInfo: LX.Download.ListItem, message?: string) => {
+  setStatus(downloadInfo, DOWNLOAD_STATUS.ERROR, message)
+  void window.lx.worker.download.removeTask(downloadInfo.id)
+  runingTask.delete(downloadInfo.id)
+  void checkStartTask()
+}`, `const handleError = async(downloadInfo: LX.Download.ListItem, message?: string) => {
+  const id = downloadInfo.id
+  beginDownloadStop(id)
+  setStatus(downloadInfo, DOWNLOAD_STATUS.ERROR, message)
+  runingTask.delete(id)
+  void checkStartTask()
+  try { await window.lx.worker.download.removeTask(id) }
+  catch (error) { console.error(error) }
+  finally { endDownloadStop(id); void checkStartTask() }
+}`)
   replace('const startTask = async(downloadInfo: LX.Download.ListItem) => {', `const startTask = async(downloadInfo: LX.Download.ListItem) => {
   if (stoppingDownloads.has(downloadInfo.id)) return
   downloadEpochs.set(downloadInfo.id, (downloadEpochs.get(downloadInfo.id) || 0) + 1)`)
+  replace('  void handleStartTask(downloadInfo)', `  const epoch = downloadEpochs.get(downloadInfo.id)
+  void handleStartTask(downloadInfo).catch(error => {
+    if (downloadEpochs.get(downloadInfo.id) !== epoch || !downloadList.includes(downloadInfo)) return
+    return handleError(downloadInfo, error?.message || String(error))
+  })`)
   replace('  const waitList = list.filter(item => {', '  const waitList = list.filter(item => {\n    if (stoppingDownloads.has(item.id)) return false')
   replace('    switch (event.action) {', '    if (!isCurrent()) return\n    switch (event.action) {')
   const start = source.indexOf("      case 'complete':")

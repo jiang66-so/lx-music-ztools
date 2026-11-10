@@ -25,12 +25,14 @@ function load() {
   const worker = { startTask: async (info, _path, _skip, callback) => callbacks.set(info.id, callback),
     writeMeta: () => meta, saveLrc: async () => {}, finalizeTask: async (...args) => finalized.push(args),
     removeTask: async id => removed.push(id), pauseTask: async () => {} }
+  const diagnostics = []
+  const runtimeConsole = { ...console, log: (...args) => diagnostics.push(args), error: (...args) => diagnostics.push(args) }
   const module = { exports: {} }
   const source = adapt(fs.readFileSync('vendor/lx/src/renderer/store/download/action.ts', 'utf8'))
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   vm.runInNewContext(code, { exports: module.exports, module, require: name => { if (!imports[name]) throw new Error('Unexpected import: ' + name); return imports[name] },
-    window: { lx: { worker: { download: worker } }, app_event: { downloadListUpdate() {} }, i18n: { t: key => key } }, setTimeout: callback => timers.push(callback), clearTimeout() {}, console })
-  return { actions: module.exports, list, callbacks, removed, saved, finalized, finishMeta, worker, ipc, setting, online, flushTimers() { for (const callback of timers.splice(0)) callback() } }
+    window: { lx: { worker: { download: worker } }, app_event: { downloadListUpdate() {} }, i18n: { t: key => key } }, setTimeout: callback => timers.push(callback), clearTimeout() {}, console: runtimeConsole })
+  return { actions: module.exports, list, callbacks, removed, saved, finalized, finishMeta, worker, ipc, setting, online, diagnostics, flushTimers() { for (const callback of timers.splice(0)) callback() } }
 }
 const task = id => ({ id, status: S.PAUSE, isComplate: false, progress: 0, metadata: { url: 'http://test/audio', quality: '128k', fileName: id + '.mp3', filePath: '/download/' + id + '.mp3', musicInfo: { name: id, singer: 'artist', meta: { albumName: 'album' } } } })
 
@@ -79,7 +81,7 @@ test('metadata failure leaves original UI incomplete and retains backend finaliz
   assert.deepEqual(x.finalized, [['bad', 'tag failure']])
   assert.equal(x.removed.length, 0)
 })
-const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
+const deferred = () => { let resolve, reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail }); return { promise, resolve, reject } }
 async function until(predicate) { const deadline = Date.now() + 5000; while (!predicate()) { assert.ok(Date.now() < deadline, 'async stage did not start'); await new Promise(setImmediate) } }
 test('pause waits only for an already started ACK commit and rejects its stale completion before restarting the same id', async () => {
   const x = load(), info = task('ack-race'); x.list.push(info); x.finishMeta()
@@ -181,4 +183,95 @@ for (const resource of ['picture', 'embed-lyric', 'sidecar-lyric']) for (const s
   assert.equal(writes.length, writesBeforeStop)
   assert.equal(replacement.status, S.RUN); assert.equal(replacement.isComplate, false)
   assert.deepEqual(x.removed, stop === 'remove' ? [info.id] : [])
+})
+const settle = async () => { await new Promise(setImmediate); await new Promise(setImmediate) }
+for (const stop of ['pause', 'remove']) test(`initial URL rejection after ${stop} cannot clean up a restarted same-id task`, async () => {
+  const x = load(), old = task('late-initial-url'); old.metadata.url = null; x.list.push(old)
+  const pending = deferred(); let requested = false
+  x.online.getMusicUrl = () => { requested = true; return pending.promise }
+  await x.actions.startDownloadTasks([old]); await until(() => requested)
+  if (stop === 'pause') await x.actions.pauseDownloadTasks([old])
+  else await x.actions.removeDownloadTasks([old.id])
+  const current = stop === 'pause' ? old : task(old.id)
+  current.metadata.url = 'http://test/current-audio'
+  if (stop === 'remove') x.list.push(current)
+  await x.actions.startDownloadTasks([current])
+  pending.reject(new Error('old source URL failed')); await settle()
+  assert.equal(current.status, S.RUN); assert.equal(current.isComplate, false)
+  assert.deepEqual(x.removed, stop === 'remove' ? [old.id] : [])
+})
+test('a current backend start rejection becomes the original error text and releases its running slot', async () => {
+  const x = load(), bad = task('bad-start'), next = task('waiting-start'); x.list.push(bad, next)
+  x.setting['download.maxDownloadNum'] = 1
+  const start = x.worker.startTask
+  x.worker.startTask = async (...args) => { if (args[0].id === bad.id) throw new Error('invalid selected download path'); return start(...args) }
+  await x.actions.startDownloadTasks([bad, next]); await settle()
+  assert.equal(bad.status, S.ERROR); assert.equal(bad.statusText, 'invalid selected download path')
+  assert.equal(bad.isComplate, false); assert.equal(next.status, S.RUN)
+  assert.ok(x.callbacks.has(next.id)); assert.deepEqual(x.removed, [bad.id])
+})
+test('a late backend start rejection cannot error or remove a new round of the same id', async () => {
+  const x = load(), old = task('late-start'); x.list.push(old)
+  const pending = deferred(), start = x.worker.startTask; let first = true
+  x.worker.startTask = (...args) => { if (first) { first = false; return pending.promise } return start(...args) }
+  await x.actions.startDownloadTasks([old])
+  await x.actions.removeDownloadTasks([old.id])
+  const current = task(old.id); x.list.push(current)
+  await x.actions.startDownloadTasks([current])
+  pending.reject(new Error('old backend start failed')); await settle()
+  assert.equal(current.status, S.RUN); assert.equal(current.isComplate, false)
+  assert.deepEqual(x.removed, [old.id])
+})
+test('old refresh success and refresh rejection cannot update or remove a replacement task', async () => {
+  for (const result of ['resolved-source', 'rejected-backend']) {
+    const x = load(), old = task(`late-refresh-${result}`); x.list.push(old)
+    const pending = deferred(), updates = []; let requested = false
+    x.online.getMusicUrl = result === 'resolved-source' ? () => { requested = true; return pending.promise } : async () => 'http://test/refreshed-audio'
+    x.worker.updateUrl = (...args) => { updates.push(args); requested = true; return result === 'rejected-backend' ? pending.promise : Promise.resolve() }
+    await x.actions.startDownloadTasks([old])
+    await x.callbacks.get(old.id)({ action: 'refreshUrl' }); await until(() => requested)
+    await x.actions.removeDownloadTasks([old.id])
+    const current = task(old.id); x.list.push(current); await x.actions.startDownloadTasks([current])
+    if (result === 'resolved-source') pending.resolve('http://test/old-resolved-url')
+    else pending.reject(new Error('old refresh backend rejected'))
+    await settle()
+    assert.equal(current.status, S.RUN)
+    assert.equal(updates.length, result === 'resolved-source' ? 0 : 1)
+    assert.deepEqual(x.removed, [old.id])
+    assert.equal(x.diagnostics.length, 0)
+  }
+})
+test('a current initial URL failure retains its original message and can retry normally', async () => {
+  const x = load(), info = task('current-url-failure'); info.metadata.url = null; x.list.push(info)
+  x.online.getMusicUrl = async () => { throw new Error('source temporarily rejected URL') }
+  await x.actions.startDownloadTasks([info]); await settle()
+  assert.equal(info.status, S.ERROR); assert.equal(info.statusText, 'download_status_error_url_failed')
+  assert.equal(info.isComplate, false); assert.deepEqual(x.removed, [info.id])
+  x.online.getMusicUrl = async () => 'http://test/retry-audio'
+  await x.actions.startDownloadTasks([info]); await settle()
+  assert.equal(info.status, S.RUN); assert.equal(info.metadata.url, 'http://test/retry-audio')
+  assert.ok(x.callbacks.has(info.id)); assert.deepEqual(x.removed, [info.id])
+})
+test('a current refresh backend rejection is handled as error and releases the next task', async () => {
+  const x = load(), bad = task('current-refresh-failure'), next = task('after-refresh-failure'); x.list.push(bad, next)
+  x.setting['download.maxDownloadNum'] = 1
+  x.online.getMusicUrl = async () => 'http://test/refreshed-audio'
+  x.worker.updateUrl = async () => { throw new Error('current refreshed URL was refused') }
+  await x.actions.startDownloadTasks([bad, next])
+  await x.callbacks.get(bad.id)({ action: 'refreshUrl' }); await settle()
+  assert.equal(bad.status, S.ERROR); assert.equal(bad.statusText, 'current refreshed URL was refused')
+  assert.equal(bad.isComplate, false); assert.equal(next.status, S.RUN)
+  assert.ok(x.callbacks.has(next.id)); assert.deepEqual(x.removed, [bad.id])
+  assert.ok(x.diagnostics.some(args => args.some(value => value?.message === 'current refreshed URL was refused')))
+})
+test('startup cleanup rejection is observed without leaving the task running or blocking another task', async () => {
+  const x = load(), bad = task('start-cleanup-reject'), next = task('after-cleanup-reject'); x.list.push(bad, next)
+  x.setting['download.maxDownloadNum'] = 1
+  const start = x.worker.startTask
+  x.worker.startTask = async (...args) => { if (args[0].id === bad.id) throw new Error('backend refused start'); return start(...args) }
+  x.worker.removeTask = async () => { throw new Error('cleanup rejected') }
+  await x.actions.startDownloadTasks([bad, next]); await settle()
+  assert.equal(bad.status, S.ERROR); assert.equal(bad.statusText, 'backend refused start')
+  assert.equal(next.status, S.RUN); assert.ok(x.callbacks.has(next.id))
+  assert.ok(x.diagnostics.some(args => args.some(value => value?.message === 'cleanup rejected')))
 })
