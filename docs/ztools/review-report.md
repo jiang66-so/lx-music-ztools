@@ -1,5 +1,7 @@
 # 独立审查与最终修复记录
 
+本页保留0.1.0的审查过程。0.1.1本轮设置修复的复核及实际验收见[设置逐项验收](settings-validation-report.md)。
+
 最终代码审查结论：**Spec compliance Approved；Quality Approved；三个Important全部ADDRESSED，新增Critical 0 / Important 0**。结论对应修复代码 `5ac4946`；随后新ZIP `8318ebb161be9d95a5c3c6edebd714f30beed2fd8e022cfebe91708561f5cf1e` 已由协调者完成159项Node检查、14个宿主脚本、7项认证即时落盘、用户源真实播放下载及50次短回归。具体运行范围见 [验证回执](verification-report.md)。
 
 以下保留最初发现和后续复核的时间顺序，因此最初的Request changes不是当前未关闭状态。私有脚本、URL、凭据和原始临时数据均未复制到本文或安装包。

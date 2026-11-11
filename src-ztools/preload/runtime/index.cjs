@@ -11,6 +11,7 @@ const registerDownload = require('../upstream/main/modules/winMain/rendererEvent
 const listEvents = require('../upstream/main/modules/commonRenderers/list/winRendererEvent.cjs')
 const dislikeEvents = require('../upstream/main/modules/commonRenderers/dislike/winRendererEvent.cjs')
 const { createNetwork } = require('./network.cjs')
+const { createMediaProxy } = require('./media-proxy.cjs')
 const dns = require('node:dns/promises')
 const { createKV } = require('./kv.cjs')
 const defaultHotKey = require('../upstream/common/defaultHotKey.cjs').default
@@ -35,6 +36,7 @@ function initializeRuntime({ bridge, directory, ztools, clipboard, ipcRenderer }
   const data = createDataService(directory)
   const settings = createSettings(data.getDatabase())
   const network = createNetwork()
+  const media = createMediaProxy()
   const kv = createKV(data.getDatabase(), 'data')
   const config = createKV(data.getDatabase(), 'host')
   const themes = createThemes(data.getDatabase())
@@ -87,6 +89,7 @@ function initializeRuntime({ bridge, directory, ztools, clipboard, ipcRenderer }
   bridge.register('runtime:ready', async () => { await downloadReady; return true })
   bridge.register('network:fetch', options => network.request(options).result)
   bridge.register('network:cancel', id => network.cancel(id))
+  bridge.register('media:resource', url => media.resource(url))
   bridge.register('dns:lookup', ({ hostname, options }) => dns.lookup(hostname, options))
   bridge.register('files:call', ({ method, args }) => files.call(method, args))
   bridge.register('worker:main', ({ method, args }) => callMainWorker(files, method, args))
@@ -135,6 +138,7 @@ function initializeRuntime({ bridge, directory, ztools, clipboard, ipcRenderer }
       await close(unregisterList); await close(unregisterDislike)
       for (const events of [lx.event_app, lx.event_list, lx.event_dislike]) await close(() => events.removeAllListeners())
       await close(() => sources.dispose())
+      await close(() => media.dispose())
       await close(() => network.dispose())
       await close(() => data.close())
       if (context.lx === lx) { context.lx = null; context.bridge = null }

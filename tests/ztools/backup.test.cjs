@@ -37,6 +37,13 @@ test('legacy LX default-list typo and old settings migrate through original conv
   await x.backup.import(await x.document({ type: 'setting', data: { version: '1.22.3', player: { volume: 0.21 } } }), 'settings')
   assert.equal(x.settings.get()['player.volume'], 0.21)
 })
+
+test('upstream numeric timer minutes in settings backups restore with the same canonical type', async t => {
+  const x = await fixture(t)
+  await x.backup.import(await x.document({ type: 'setting_v2', data: { 'player.waitPlayEndStopTime': 30 } }), 'settings')
+  assert.equal(x.settings.get()['player.waitPlayEndStopTime'], '30')
+  assert.equal(x.notices[0].setting['player.waitPlayEndStopTime'], '30')
+})
 test('invalid backups and SQL failure cannot produce mixed settings/lists or commit notices', async t => {
   const x = await fixture(t), before = x.settings.get()
   for (const input of [{ type: 'allData_v99' }, { type: 'allData_v2', setting: { 'player.volume': 'bad' }, playList: [] }, { type: 'playList_v2', data: [{ id: 'bad', list: [{}] }] }]) {

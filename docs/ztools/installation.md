@@ -1,15 +1,17 @@
 # 安装、使用与数据迁移
 
-适用目标：0.1.0，Windows x64，第三方原生移植版。实际宿主验证组合及尚未完成的项目见 [兼容矩阵](compatibility.md)。当前版本不作市场已上架声明。
+适用目标：0.1.2，Windows x64，第三方原生移植版。实际宿主验证组合及尚未完成的项目见 [兼容矩阵](compatibility.md)。当前版本不作市场已上架声明。
 
 ## 安装本地包
 
 1. 源码构建执行 `npm ci`、`npm run build:ztools`、`npm run pack:ztools`。构建安装插件独立运行依赖并检查资源与许可。
-2. 在 `dist-ztools/` 找到 `lx-music-ztools-0.1.0.zip` 及 `.zip.sha256`。用 `Get-FileHash -Algorithm SHA256` 比对旁边校验值；包内 `build-info.json` 记录文件清单与逐文件 SHA256。
+2. 在 `dist-ztools/` 找到 `lx-music-ztools-0.1.2.zip` 及 `.zip.sha256`。用 `Get-FileHash -Algorithm SHA256` 比对旁边校验值；包内 `build-info.json` 记录文件清单与逐文件 SHA256。
 3. 打开 ZTools「设置 → 插件应用 → 导入本地插件」，选择 ZIP，确认安装、启用。
 4. 搜索 `lxmusic`、「LX Music」或「洛雪音乐」打开。首次阅读并接受原使用协议，再导入自己的音源。
 
 开发方式是注册 `src-ztools/plugin.json`，随后安装并启用开发项目。生成文件、选中目录或在隔离测试实例安装均不会自动安装到日常使用的 ZTools。默认播放器入口为 `dist/lx.html`，`dist/index.html` 是诊断页。
+
+从旧版更新后，终止当前已打开的LX插件，再通过`lxmusic`重新进入，确保加载新样式。0.1.2恢复了六档字体大小的实际文字缩放，旧页面不会自动替换内存中的样式。
 
 运行包自带 `preload/node_modules`，不依赖开发目录或另装 LX 桌面版。不支持内置 `node:sqlite` 或缺少所需公开 API 的宿主会报告错误；当前不承诺所有旧版 ZTools 兼容。
 

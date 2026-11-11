@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 // official sync peer is only a test oracle; the installed plugin never needs it.
 const groups = [
   ['host-probe', ['test-p0.mjs', 'test-lx-renderer.mjs']],
+  ['settings', ['test-settings.mjs', 'test-settings-effects.mjs', 'test-font-size.mjs']],
   ['source', ['test-source.mjs', 'test-source-ui.mjs']],
   ['catalog', ['test-catalog.mjs']],
   ['player', ['test-player.mjs', 'test-local-media.mjs']],

@@ -1,10 +1,10 @@
 # 原 LX 默认设置逐项映射
 
-基线：`vendor/lx/src/common/defaultSetting.ts`（LX 2.12.6 / `323e4bac`）。下表逐项保留所有**有效声明键**，不把源码中的注释键算成设置。默认值列采用上游表达式；`isMac`/`isWin`在本次Windows首验分别为false/true，`path.join(os.homedir(), 'Desktop')`是本机桌面路径。上游1/2月会把当前主题和歌词已播放色改为新年默认值。
+基线：`vendor/lx/src/common/defaultSetting.ts`（LX 2.12.6 / `323e4bac`）。下表逐项保留全部135个**有效声明键**供存储和备份兼容，不把源码中的注释键算成设置，也不把保留键等同于设置页仍展示对应控件。默认值列采用上游表达式；`isMac`/`isWin`在本次Windows首验分别为false/true，`path.join(os.homedir(), 'Desktop')`是本机桌面路径。上游1/2月会把当前主题和歌词已播放色改为新年默认值。
 
-状态「有效」指代码已接入原业务/界面或服务，**不表示逐个选项都做过实际人工验收**；单项/宿主证据另见[验证矩阵](compatibility.md)。「宿主管理」表示原值可为备份兼容保留，但不控制原独立桌面能力；「不支持」明确不能据此承诺行为；「条件有效」必须满足列明的宿主能力。
+状态「有效」指代码已接入原业务/界面或服务，**不表示逐个选项都做过实际人工验收**；单项/宿主证据另见[设置验证报告](settings-validation-report.md)和[验证矩阵](compatibility.md)。「界面已移除」表示按用户确认移除插件场景不适用的控件，原键继续保留；「宿主管理」表示插件更新等行为由ZTools负责，旧键不控制原独立桌面能力；「不支持」明确不能据此承诺行为；「条件有效」必须满足列明的宿主能力，并以实际执行结果为准。
 
-适配依据：`build-config/ztools/host-settings-loader.cjs`，`src/ztools/SettingHotKey.vue`、`SettingUpdate.vue`，以及`preload/runtime/{settings,host,windows,commands}.cjs`。设置与列表同一SQLite；只允许原默认键和对应类型。原UI部分限制由构建loader禁用/说明；导入备份中保留的旧值不会自动获得缺失的系统能力。
+适配依据：`build-config/ztools/host-settings-loader.cjs`、`prune-settings.cjs`，`src/ztools/SettingHotKey.vue`、`SettingUpdate.vue`，以及`preload/runtime/{settings,host,windows,commands}.cjs`。设置与列表使用同一SQLite，只接受原默认键及其校验后的值。用户确认“歌词相关先保留”后，非歌词的原窗口、尺寸、按钮位置、托盘、透明样式、任务栏进度、电源锁和浏览器资源缓存控件已从插件设置页移除；歌词相关控件继续保留，缺失能力的项目仍禁用并说明限制。导入旧值不会自动获得缺失的系统能力。各域逐项证据见[界面设置审计](audits/2026-11-10-ui-settings.md)、[播放与歌词设置审计](audits/2026-11-10-player-settings.md)、[服务设置审计](audits/2026-11-10-service-settings.md)。
 
 ## 结构版本
 | 原键 | 上游默认值 | 状态 | 插件行为与限制 |
@@ -13,9 +13,9 @@
 ## 基本
 | 原键 | 上游默认值 | 状态 | 插件行为与限制 |
 | --- | --- | --- | --- |
-| `common.windowSizeId` | `3` | 宿主管理 | 原独立窗口尺寸选择禁用；插件区域由宿主管理，保留导入值不代表可控制外层窗口。 |
-| `common.fontSize` | `16` | 有效 | 原界面基准字号。 |
-| `common.startInFullscreen` | `false` | 宿主管理 | 原独立应用启动全屏禁用；插件全屏由宿主管理。 |
+| `common.windowSizeId` | `3` | 界面已移除 | 原独立窗口尺寸选择已移除；插件区域由宿主管理，兼容保留的值不控制外层窗口。 |
+| `common.fontSize` | `16` | 有效 | 0.1.2恢复原px→rem构建步骤，六档设置同时影响实际文字和配套尺寸；已验证计算字号、可见字宽、切页及终止后重开。0.1.1只验证根字号/保存不足，详见[渲染复验](font-size-fix.md)。 |
+| `common.startInFullscreen` | `false` | 界面已移除 | 原独立应用启动全屏控件已移除；兼容保留旧值，插件外层全屏由宿主管理。 |
 | `common.langId` | `null` | 有效 | 原界面语言选择。 |
 | `common.apiSource` | `'temp'` | 有效 | 当前用户自备音源ID；需要导入并成功初始化，旧ID不保证新设备可用。 |
 | `common.sourceNameType` | `'alias'` | 有效 | 原平台名称/别名显示。 |
@@ -23,9 +23,9 @@
 | `common.isShowAnimation` | `true` | 有效 | 原界面动画开关。 |
 | `common.randomAnimate` | `true` | 有效 | 原随机动画配置。 |
 | `common.isAgreePact` | `false` | 有效 | 原使用协议接受状态；导入备份时重置为false。 |
-| `common.controlBtnPosition` | `isMac ? 'left' : 'right'` | 宿主管理 | 原桌面控制按钮位置禁用；插件主页面桌面按钮隐藏。 |
+| `common.controlBtnPosition` | `isMac ? 'left' : 'right'` | 界面已移除 | 原桌面控制按钮位置控件已移除；插件主页面桌面按钮隐藏，原值仅为兼容保留。 |
 | `common.playBarProgressStyle` | `'mini'` | 有效 | 原播放栏进度显示样式。 |
-| `common.transparentWindow` | `!isMac` | 宿主管理 | 原主窗口透明选项禁用；插件外层窗口由宿主管理。 |
+| `common.transparentWindow` | `!isMac` | 界面已移除 | 原主窗口内置圆角、阴影及透明样式控件已移除；插件外层窗口由宿主管理，兼容保留旧值。 |
 | `common.tryAutoUpdate` | `true` | 宿主管理 | 原LX桌面自动更新页已替换；更新由ZTools市场/本地包安装管理，此键不驱动插件升级。 |
 | `common.showChangeLog` | `true` | 宿主管理 | 原桌面更新日志设置不作为插件更新入口；当前版本变更见CHANGELOG和宿主信息。 |
 ## 播放与音效
@@ -34,16 +34,16 @@
 | `player.startupAutoPlay` | `false` | 有效 | 原启动自动播放；取决于可恢复列表/资源和宿主音频能力。 |
 | `player.togglePlayMethod` | `'listLoop'` | 有效 | 原列表循环/单曲/随机等播放方式。 |
 | `player.playQuality` | `'128k'` | 有效 | 原播放音质选择；音源和歌曲须实际支持该音质。 |
-| `player.isShowTaskProgess` | `true` | 不支持 | Windows任务栏进度不支持，原选项禁用。 |
-| `player.isShowStatusBarLyric` | `false` | 不支持 | 无系统状态栏歌词渲染，原选项禁用；保留原键不构成系统显示能力。 |
+| `player.isShowTaskProgess` | `true` | 界面已移除 | Windows任务栏进度没有可用的插件实现，对应非歌词控件已移除；原键仅为兼容保留。 |
+| `player.isShowStatusBarLyric` | `false` | 不支持 | 按“歌词相关先保留”继续展示原选项并禁用、说明限制；无系统状态栏歌词渲染，保留控件和原键不构成系统显示能力。 |
 | `player.volume` | `1` | 有效 | 原播放器音量。 |
-| `player.powerSaveBlocker` | `true` | 不支持 | 无独立系统电源锁公开接口，原选项禁用。 |
+| `player.powerSaveBlocker` | `true` | 界面已移除 | 无独立系统电源锁公开接口，对应非歌词控件已移除；原键仅为兼容保留。 |
 | `player.isMute` | `false` | 有效 | 原静音。 |
 | `player.playbackRate` | `1` | 有效 | 原播放速度。 |
 | `player.preservesPitch` | `true` | 有效 | 原变速保留音高；依赖音频引擎实现。 |
-| `player.isMaxOutputChannelCount` | `false` | 条件有效 | 原AudioContext输出通道策略；受实际设备/浏览器限制，非所有通道实机验收。 |
-| `player.mediaDeviceId` | `'default'` | 条件有效 | 仅mediaDevices枚举与setSinkId可用时选择输出；缺失时禁用选择并使用系统默认。 |
-| `player.isMediaDeviceRemovedStopPlay` | `false` | 条件有效 | 只有设备枚举及devicechange可用时才能检测移除；当前缺失能力的宿主不能保证有效。 |
+| `player.isMaxOutputChannelCount` | `false` | 条件有效 | 原AudioContext输出通道策略；实际通道数受设备/浏览器限制。自选输出需元素和AudioContext双路由能力，不能从回归通过推断所有物理设备可用。 |
+| `player.mediaDeviceId` | `'default'` | 条件有效 | 自选输出须同时具备mediaDevices枚举、HTMLMediaElement.setSinkId和AudioContext.setSinkId。按实际输出持有者切换：DSP接管前切元素，接管后切context。真实宿主已通过非默认设备切换及回系统默认；旧宿主缺能力时只提供默认。此前元素AbortError已定位并修复，不能作为当前硬件限制；不扩大为所有设备/人工听音通过。 |
+| `player.isMediaDeviceRemovedStopPlay` | `false` | 条件有效 | 需先具备上述路由/枚举能力及devicechange监听。设备ID、groupId、label共同辨别变化，避免同名设备漏判；真实Vue回归验证移除时暂停。物理拔插尚未由人工验收。 |
 | `player.isShowLyricTranslation` | `false` | 有效 | 原翻译歌词显示，取决于资源。 |
 | `player.isShowLyricRoma` | `false` | 有效 | 原罗马音歌词显示，取决于资源。 |
 | `player.isSwapLyricTranslationAndRoma` | `false` | 有效 | 原翻译/罗马音显示顺序。 |
@@ -55,7 +55,7 @@
 | `player.waitPlayEndStopTime` | `''` | 有效 | 原定时停止时间设置；沿用原界面/解析。 |
 | `player.autoSkipOnError` | `true` | 有效 | 原失败自动跳过。 |
 | `player.isAutoCleanPlayedList` | `false` | 有效 | 原已播放列表自动清理。 |
-| `player.soundEffect.convolution.fileName` | `''` | 有效 | 原卷积文件选择；必须通过文件对话框获得访问授权。 |
+| `player.soundEffect.convolution.fileName` | `''` | 有效 | 原卷积预设对应的打包filters资源名；不是任意本地卷积文件。真实宿主已验证内置telephone资源解码及增益节点生效。 |
 | `player.soundEffect.convolution.mainGain` | `10` | 有效 | 原卷积主增益。 |
 | `player.soundEffect.convolution.sendGain` | `0` | 有效 | 原卷积发送增益。 |
 | `player.soundEffect.biquadFilter.hz31` | `0` | 有效 | 原均衡器31Hz频段增益；原Web Audio链路保留。 |
@@ -89,7 +89,7 @@
 | `desktopLyric.isAlwaysOnTopLoop` | `false` | 有效 | 置顶时每500ms通过公开moveTop维持；不绕过系统窗口策略。 |
 | `desktopLyric.isShowTaskbar` | `false` | 有效 | 公开setSkipTaskbar控制歌词独立窗口任务栏可见性；不是主播放器缩略按钮。 |
 | `desktopLyric.audioVisualization` | `false` | 有效 | 原歌词页音频可视化，从同一播放器取分析数据，不另建audio。 |
-| `desktopLyric.fullscreenHide` | `true` | 不支持 | 未接系统全屏检测，原选项禁用；不能在其他应用全屏时保证自动隐藏。 |
+| `desktopLyric.fullscreenHide` | `true` | 不支持 | 按“歌词相关先保留”继续展示原选项并禁用、说明限制；未接系统全屏检测，不能在其他应用全屏时保证自动隐藏。 |
 | `desktopLyric.pauseHide` | `true` | 有效 | 原歌词renderer暂停淡出逻辑；不是关闭窗口或停止服务。 |
 | `desktopLyric.width` | `450` | 有效 | 公开窗口bounds宽度，最小38；可结合屏幕限制。 |
 | `desktopLyric.height` | `300` | 有效 | 公开窗口bounds高度，最小38；可结合屏幕限制。 |
@@ -146,18 +146,18 @@
 | --- | --- | --- | --- |
 | `search.isShowHotSearch` | `false` | 有效 | 原热搜显示；外部接口是否可用需分别判断。 |
 | `search.isShowHistorySearch` | `false` | 有效 | 原本地搜索历史显示。 |
-| `search.isFocusSearchBox` | `false` | 有效 | 原进入搜索页自动聚焦。 |
+| `search.isFocusSearchBox` | `false` | 有效 | 原应用启动时自动聚焦搜索框；不是每次进入搜索页都重新聚焦。 |
 ## 网络
 | 原键 | 上游默认值 | 状态 | 插件行为与限制 |
 | --- | --- | --- | --- |
-| `network.proxy.enable` | `false` | 有效 | 原HTTP代理开关，适配请求与下载路径读取；不保证宿主全部网络流量代理。 |
-| `network.proxy.host` | `''` | 有效 | 原请求代理地址；需要用户可用代理，不代表已做所有真实代理组合验收。 |
-| `network.proxy.port` | `''` | 有效 | 原请求代理端口；需可达且配置有效。 |
+| `network.proxy.enable` | `false` | 有效 | 原请求、用户音源请求、下载/封面，以及原播放器和下一首预加载媒体流均读取同一HTTP代理配置；原播放及预加载通过插件本地媒体代理转发，不控制ZTools自身或插件外部网页流量。受控和宿主证据见设置验证报告及服务审计。 |
+| `network.proxy.host` | `''` | 有效 | 上述请求与播放/预加载媒体流的HTTP代理地址；需要用户可用代理，不代表所有真实代理组合均已验收。 |
+| `network.proxy.port` | `''` | 有效 | 上述请求与播放/预加载媒体流的HTTP代理端口；需可达且配置有效。 |
 ## 托盘
 | 原键 | 上游默认值 | 状态 | 插件行为与限制 |
 | --- | --- | --- | --- |
-| `tray.enable` | `false` | 宿主管理 | 原LX独立托盘禁用；插件入口/后台由ZTools管理。 |
-| `tray.themeId` | `0` | 宿主管理 | 原托盘图标主题禁用；不修改宿主托盘。 |
+| `tray.enable` | `false` | 界面已移除 | 原LX独立托盘/关闭到托盘控件已移除，原键为兼容保留；插件入口与后台由ZTools管理。 |
+| `tray.themeId` | `0` | 界面已移除 | 原托盘图标主题控件已移除，原键为兼容保留；不修改宿主托盘。 |
 ## 同步
 | 原键 | 上游默认值 | 状态 | 插件行为与限制 |
 | --- | --- | --- | --- |
@@ -187,8 +187,8 @@
 ## 不在 defaultSetting 中的管理项
 
 - 原快捷键页替换为五条宿主指令的配置入口：LX播放/暂停、上一首、下一首、搜索、桌面歌词，通过`redirectHotKeySetting`交给ZTools管理；原默认快捷键数据的保留不等于注册了所有原全局热键。物理快捷键、系统媒体键未完整验收。
-- 主窗口最小化/关闭按钮隐藏，隐藏操作对应`outPlugin(false)`，继续后台；终止对应`outPlugin(true)`。窗口全屏/尺寸/托盘由宿主管理。
-- Windows任务栏缩略图按钮和独立电源锁没有可用公开接口；系统MediaSession只按运行时实际公开能力使用，不承诺任意系统面板/媒体键行为。
-- 「其他」中的浏览器资源缓存显示由ZTools管理，清理项禁用；歌曲地址、歌词、换源缓存和不喜欢列表仍由插件独立管理。
+- 主窗口最小化/关闭按钮隐藏，隐藏操作对应`outPlugin(false)`，继续后台；终止对应`outPlugin(true)`。原窗口全屏、尺寸、按钮位置、托盘及透明样式控件已移除；主题编辑中的关闭/最小化按钮配色也已移除，隐藏播放详情页按钮配色继续保留。
+- Windows任务栏进度及独立电源锁控件已移除，原设置键仍保留；任务栏缩略图按钮没有可用公开接口。系统MediaSession只按运行时实际公开能力使用，不承诺任意系统面板/媒体键行为。状态栏歌词与桌面歌词全屏隐藏等歌词控件按用户要求保留，继续说明未支持的限制。
+- 「其他」中的浏览器资源缓存显示/清理整段已移除；歌曲地址、歌词、换源缓存和不喜欢列表仍由插件独立管理，缓存清理失败时展示错误并恢复按钮供重试。
 - 插件更新页说明市场/本地包安装管理，不使用LX桌面自动更新器，不把用户音源包含到升级包中。
 - 音源管理、备份/恢复、下载目录授权、EQ/卷积预设等还有独立业务数据/文件，不由本表键值覆盖；全部备份按原格式只含设置与列表。

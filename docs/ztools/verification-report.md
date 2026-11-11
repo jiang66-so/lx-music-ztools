@@ -1,5 +1,7 @@
 # 0.1.0 本地验证回执
 
+这是0.1.0的历史回执。当前0.1.1设置修复、实际宿主回归和安装包校验见[设置逐项验收](settings-validation-report.md)，不要将本页旧ZIP或长测对象当作当前版本。
+
 日期：2026-11-10。对象是Windows x64第三方原生插件；没有把当前版本发布到市场。交付ZIP路径为 `dist-ztools/lx-music-ztools-0.1.0.zip`，SHA256：
 
 ```text

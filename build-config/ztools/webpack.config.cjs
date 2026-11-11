@@ -26,8 +26,9 @@ const absoluteReplacements = new Map([
   ['renderer/utils/request', 'request.ts'], ['renderer/worker', 'worker.ts'], ['renderer/worker/index', 'worker.ts'],
   ['renderer/worker/utils', 'worker.ts'], ['renderer/worker/utils/index', 'worker.ts'],
 ].map(([file, replacement]) => [path.join(lx, file), adapter(replacement)]))
-for (const name of ['SettingHotKey', 'SettingUpdate']) absoluteReplacements.set(path.join(lx, 'renderer/views/Setting/components', name + '.vue'), adapter(name + '.vue'))
-const css = module => ['style-loader', { loader: 'css-loader', options: { esModule: false, modules: module ? { namedExport: false, exportLocalsConvention: 'camelCase' } : false } }]
+for (const name of ['SettingHotKey', 'SettingUpdate', 'SettingAbout']) absoluteReplacements.set(path.join(lx, 'renderer/views/Setting/components', name + '.vue'), adapter(name + '.vue'))
+const css = module => ['style-loader', { loader: 'css-loader', options: { esModule: false, modules: module ? { namedExport: false, exportLocalsConvention: 'camelCase' } : false } },
+  { loader: 'postcss-loader', options: { postcssOptions: { ...require('./postcss.config.cjs'), config: false } } }]
 module.exports = {
   mode: 'development', target: 'web', devtool: 'source-map',
   entry: { lx: adapter('entry.ts'), lyric: adapter('lyric-entry.ts') },
@@ -36,6 +37,13 @@ module.exports = {
     modules: [path.join(root, 'node_modules'), 'node_modules'],
     fallback: { vm: false, crypto: require.resolve('crypto-browserify'), stream: require.resolve('stream-browserify'), buffer: require.resolve('buffer/'), events: require.resolve('events/'), path: require.resolve('path-browserify'), querystring: require.resolve('querystring-es3') } },
   module: { rules: [
+    { test: /renderer[\\/]core[\\/]useApp[\\/](?:index|useSettingSync)\.ts$/, enforce: 'pre', use: path.join(__dirname, 'host-lifecycle-loader.cjs') },
+    { test: /renderer[\\/]plugins[\\/]player[\\/]index\.ts$/, enforce: 'pre', use: path.join(__dirname, 'engine-routing-loader.cjs') },
+    { test: /(?:core[\\/]player[\\/]action|usePreloadNextMusic)\.ts$/, enforce: 'pre', use: path.join(__dirname, 'media-proxy-loader.cjs') },
+    { test: /ThemeEditModal[\\/]index\.vue$/, enforce: 'pre', use: path.join(__dirname, 'theme-editor-loader.cjs') },
+    { test: /renderer[\\/]components[\\/](?:layout[\\/]PlayDetail[\\/]components[\\/]ControlBtns\.vue|common[\\/]SoundEffectBtn[\\/]index\.vue)$/, enforce: 'pre', use: path.join(__dirname, 'audio-routing-loader.cjs') },
+    { test: /components[\\/]layout[\\/]Toolbar[\\/]SearchInput\.vue$/, enforce: 'pre', use: path.join(__dirname, 'search-input-loader.cjs') },
+    { test: /useSettingSync\.ts$/, enforce: 'pre', use: path.join(__dirname, 'sync-settings-loader.cjs') },
     { test: /store[\\/]download[\\/]action\.ts$/, enforce: 'pre', use: path.join(__dirname, 'download-loader.cjs') },
     { test: /SettingBackup\.vue$/, enforce: 'pre', use: path.join(__dirname, 'backup-loader.cjs') },
     { test: /useMediaDevice\.ts$/, enforce: 'pre', use: path.join(__dirname, 'media-device-loader.cjs') },

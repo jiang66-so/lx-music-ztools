@@ -2,6 +2,7 @@ const defaults = require('../upstream/common/defaultSetting.cjs').default
 const migrateSetting = require('../upstream/common/utils/migrateSetting.cjs').default
 const { toNewMusicInfo, fixNewMusicInfoQuality, filterMusicList } = require('../upstream/common/utils/tools.cjs')
 const { exportLists } = require('./export-lists.cjs')
+const { normalizeSettingPatch } = require('./settings.cjs')
 const kinds = ['all', 'lists', 'settings']
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 function assert(value, message) { if (!value) throw new Error('无效的 LX 备份：' + message) }
@@ -26,7 +27,8 @@ function createBackup({ data, settings, files, onCommit }) {
       patch = Object.fromEntries(Object.entries(setting).filter(([key, value]) => Object.hasOwn(defaults, key) && value !== undefined))
       patch['common.isAgreePact'] = false
       // Validate the complete patch before any SQL is changed.
-      for (const [key, value] of Object.entries(patch)) assert(value === null || defaults[key] === null || typeof value === typeof defaults[key], '设置类型错误：' + key)
+      try { patch = normalizeSettingPatch(patch) }
+      catch (error) { assert(false, '设置类型错误：' + error.message) }
     }
     if (kind === 'all' || kind === 'lists') {
       lists = kind === 'all' ? document.defaultList ? [{ id: 'default', name: '默认列表', list: document.defaultList.list }] : document.playList

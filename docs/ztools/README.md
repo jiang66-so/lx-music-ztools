@@ -1,13 +1,18 @@
 # ZTools 原生移植使用文档
 
-此文档面向 LX Music for ZTools 0.1.0 第三方移植版。上游音乐业务基线为 LX Music Desktop 2.12.6 / `323e4bac`。目前处于本地交付验收阶段，没有发布当前版本。
+此文档面向 LX Music for ZTools 0.1.2 第三方移植版。上游音乐业务基线为 LX Music Desktop 2.12.6 / `323e4bac`。0.1.2已完成本地验收并进入源码仓库及插件中心更新流程；市场可用版本以审核合并结果为准。
 
 | 文档 | 内容 |
 | --- | --- |
+| [0.1.2字体大小修复](font-size-fix.md) | 六档实际字号/字宽/布局、终止后重开与旧验收不足的更正 |
 | [安装和迁移](installation.md) | 安装、音源、后台与退出、下载目录、备份、同步、排错、卸载 |
 | [功能与验证状态](compatibility.md) | 实现、受控测试、实际宿主、真实外部服务的分别结论 |
 | [宿主能力](host-capabilities.md) | 系统能力边界、窗口/存储/隔离方案与历史 P0 |
-| [逐项设置映射](settings-map.md) | 原 defaultSetting.ts 每个有效键的作用、宿主管理项和限制 |
+| [逐项设置映射](settings-map.md) | 原 defaultSetting.ts 全部135个兼容键的作用、已移除的非歌词控件及保留限制 |
+| [本轮设置验证报告](settings-validation-report.md) | 本轮逐项检查、修复、宿主证据与剩余限制；设备切换的AbortError失败和默认输出回退分别记录 |
+| [基本与界面设置审计](audits/2026-11-10-ui-settings.md) | 基本、主题/字体、搜索、列表、强迫症、缓存、不喜欢、快捷键和更新的逐控件链路及证据边界 |
+| [播放与歌词设置审计](audits/2026-11-10-player-settings.md) | 播放、输出设备双路由、音效及保留歌词项的行为、修复与条件限制 |
+| [服务设置审计](audits/2026-11-10-service-settings.md) | 下载、同步、开放API、网络代理及备份；包含原播放和预加载媒体流的代理链路 |
 | [模块映射](module-map.md) | 原 LX 调用链与插件适配位置 |
 | [上游差异与许可](upstream-diff.md) | 保留原 UI/协议的方式、依赖、许可、打包范围 |
 | [验证回执](verification-report.md) | 最终ZIP、自动检查、实际宿主、用户源和长测的具体结果 |

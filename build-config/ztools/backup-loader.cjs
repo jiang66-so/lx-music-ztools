@@ -16,5 +16,11 @@ module.exports = function adaptBackup(source) {
     ['importSetting', 'handleImportSetting', 'settings', 'import'], ['exportSetting', 'handleExportSetting', 'settings', 'export'],
     ['importPlayList', 'handleImportPlayList', 'lists', 'import'], ['exportPlayList', 'handleExportPlayList', 'lists', 'export'],
   ]) replace(name, next, { kind, action })
+  // Pass the chosen capability unchanged; the file service owns suffix creation.
+  for (const format of ['txt', 'csv']) {
+    const append = `          if (!path.endsWith('.${format}')) path += '.${format}'\n`
+    if (!source.includes(append)) throw new Error('LX list export filename shape changed: ' + format)
+    source = source.replace(append, '')
+  }
   return source
 }

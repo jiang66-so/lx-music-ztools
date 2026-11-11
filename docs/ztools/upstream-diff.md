@@ -16,7 +16,7 @@
 
 ## 独立运行包
 
-`npm run pack:ztools` 显式组装到新临时目录，再生成 `dist-ztools/lx-music-ztools-0.1.0.zip` 和 `.zip.sha256`。包内入口为根 `plugin.json` → `dist/lx.html` / `preload/services.js`，运行依赖完整落在 `preload/node_modules`，不依赖开发目录node_modules或外部LX安装。
+`npm run pack:ztools` 显式组装到新临时目录，再生成 `dist-ztools/lx-music-ztools-0.1.2.zip` 和 `.zip.sha256`。包内入口为根 `plugin.json` → `dist/lx.html` / `preload/services.js`，运行依赖完整落在 `preload/node_modules`，不依赖开发目录node_modules或外部LX安装。
 
 组装白名单为 `plugin.json`、`logo.png`、`LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.txt`、`native-jobs.html`、`dist`、`preload`，并生成 `build-info.json`。校验覆盖主页面、歌词页、字体/语言等前端资源清单、source Worker、AudioWorklet、preload、锁文件和传递依赖；缺失应失败。ZIP按固定顺序和时间戳生成，同一构建输入可复现SHA256。逐文件回执记录插件版本/LX基线/文件SHA256；宿主验证版本和实际验收结果另见矩阵，不用静态回执冒充运行验收。
 
@@ -26,4 +26,4 @@
 
 根LICENSE与包内LICENSE保留Apache-2.0；NOTICE说明原LX来源、基线和本项目修改。`THIRD-PARTY-NOTICES.txt` 包含声明的浏览器/runtime完整生产依赖图的版本、许可和原始许可文本，包含可能被tree-shaking剔除的声明依赖；独立runtime中的依赖许可也保持原文件。生成器缺少许可文本时失败，少数上游包无独立文本的情况采用有出处的许可补件。
 
-许可清单不收集用户音源。真实样本验证证据只保留在私有临时目录，既不属于依赖许可，也不随产品或源码打包分发。当前版本未发布或推送；历史0.0.2送审记录不能代表0.1.0已经上架或验收完成。
+许可清单不收集用户音源。真实样本验证证据只保留在私有临时目录，既不属于依赖许可，也不随产品或源码打包分发。当前版本未发布或推送；历史0.0.2送审记录不能代表0.1.1已经上架。

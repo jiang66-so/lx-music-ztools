@@ -1,7 +1,9 @@
-// Some host sessions do not expose Chromium's output-device enumeration API.
-// Keep the default audio output; avoid failing the entire original App setup.
+const fs = require('node:fs')
+const path = require('node:path')
+// Preserve the upstream source; replace only its host-dependent output-device hook.
 module.exports = source => {
   if (!source.includes('export default () => {')) throw new Error('LX media device contract changed')
-  return source.replace('export default () => {', `export default () => {
-  if (!navigator.mediaDevices) return`)
+  const helper = path.join(__dirname, '../../src/ztools/audio-capabilities.cjs').replaceAll('\\', '/')
+  return fs.readFileSync(path.join(__dirname, '../../src/ztools/use-media-device.js'), 'utf8')
+    .replace("'./audio-capabilities.cjs'", JSON.stringify(helper))
 }

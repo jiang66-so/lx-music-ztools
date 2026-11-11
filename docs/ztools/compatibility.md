@@ -1,6 +1,6 @@
 # 功能与验证状态
 
-更新：2026-11-10；版本 0.1.0，已完成下述本地自动验收、未发布。PASS 只适用于对应列的场景，不能由已实现推导真实平台或长期运行通过。
+更新：2026-11-11；当前版本0.1.2已完成本地验收，通过源码仓库及插件中心更新流程提交，市场版本以审核合并为准。0.1.0的历史长测与首次移植证据保留，0.1.1的设置修复和完整ZIP复验见[设置验收报告](settings-validation-report.md)，0.1.2的字号缺陷与渲染测量更正见[字号修复](font-size-fix.md)。PASS只适用于对应列的场景，不能由已实现推导真实平台或长期运行通过。
 
 ## 环境与证据层级
 
@@ -27,8 +27,8 @@
 | 开放 API | PASS：原 HTTP/SSE/控制协议、停止清理与失败处理 | 实际宿主 HTTP status/pause/play/next 控制同一原播放器 PASS | `artifacts/player/report.json`；默认关闭，LAN 需显式开启，沿用原访问模型 |
 | 原桌面歌词 | PASS：原 renderer-lyric、毫秒事件、独立宿主窗口、样式与配置 | 实际宿主置顶/锁定/隐藏/关闭 PASS | `artifacts/system/report.json`；歌词进程不另建播放器；系统全屏自动隐藏不支持 |
 | 指令 / 快捷键设置 | PASS：指令冷启动排队、去重、搜索、播放控制、设置API调用契约 | 最终ZIP原生指令搜索/播放暂停/上下首/歌词开关PASS；快捷键设置页面与物理按键未人工验收 | `artifacts/commands/report.json`；独立app.asar测试环境的内置设置插件路径与日常EXE不同，不据API stub证明页面跳转 |
-| 完整设置 | 所有默认键逐条映射；宿主管理/不支持项有明确说明 | 不宣称每个 UI 选项都做过人工验收 | [settings-map.md](settings-map.md)；mediaDevices 缺失只支持默认输出 |
-| 独立 ZIP / 依赖 / 许可 | PASS：显式组装、传递依赖/资源/许可缺失即失败、逐文件回执、固定时间戳ZIP | 最终0.1.0 ZIP在14个串行宿主脚本中PASS，未复制开发插件目录；另有真实用户源播放/下载PASS | `artifacts/e2e/report.json`、`artifacts/install/report.json`；完整依赖许可，不包含用户原始音源或私有临时证据 |
+| 完整设置 | 135键及全部管理项逐域审计，修复保存/同步/备份/代理/输出/搜索/缓存断链；歌词保留，非歌词桌面设置按用户决定移除 | 0.1.1实际宿主16分区、89个开关/单选保存、4项管理操作、39项音频/歌词/网络效果PASS；包括非默认输出/DSP接管修复 | [设置验收](settings-validation-report.md)；物理拔插、物理快捷键和人工声学判断不由自动验证替代 |
+| 独立 ZIP / 依赖 / 许可 | PASS：显式组装、传递依赖/资源/许可缺失即失败、逐文件回执、固定时间戳ZIP | 0.1.1最终ZIP的16个串行宿主脚本PASS；0.1.0历史14项另有记录 | `artifacts/e2e/report.json`、`artifacts/install/report.json`；实际ZIP986文件对23个私有音源hash扫描无匹配 |
 | 100 列表 / 10,000 首 / 重启 | 备份/数据受控契约PASS | 最终ZIP public kill→重开PASS，内容和顺序SHA256完全相同；源持久化、不自动发声、下载从768字节续传并完成PCM校验 | `artifacts/recovery/report.json`；恢复的任务先为pause，用户显式继续 |
 | 30 分钟后台播放+下载 / 50 次生命周期 | 核心服务检查点 PASS：1,807,934 ms，播放累计1,791.56秒，下载PCM SHA256相同 | 41.4.0 PASS；业务监听34不增长，额外Audio=0，采样进程9→9；42.3.3历史约695秒FAIL保留 | `artifacts/stability/report.json`；120次采样总工作集约1325→1217MiB。主题/歌词后续修正另做最终ZIP回归，不将最终ZIP字节冒称长测对象 |
 | 人工听音 / 物理按键 / 日常 EXE 全流程 | 未完成 | 待验 | 自动播放状态、PCM 哈希或同版本 app.asar 验证不能替代这些结果 |
