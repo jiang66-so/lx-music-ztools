@@ -4,6 +4,9 @@
   "description": "LX Music native ZTools port with isolated custom sources, downloads and LX sync",
   "type": "module",
   "scripts": {
+    "build:webview": "node scripts/build-webview.mjs",
+    "test:webview": "node scripts/test-webview.mjs",
+    "pack:webview": "npm run build:webview && node scripts/package-webview.mjs",
     "prebuild": "npm ci --prefix src-ztools/preload --omit=dev --no-audit --no-fund",
     "dev": "npm run build:runtime && node scripts/build-worker.mjs && webpack --watch --config build-config/ztools/webpack.config.cjs",
     "dev:diagnostics": "vite --host 127.0.0.1 --port 5173 --strictPort",

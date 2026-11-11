@@ -5,5 +5,7 @@ src-ztools/dist/
 artifacts/
 test-results/
 dist-ztools/
+dist-webview/
+dist-webview-packages/
 .env*
 *.log
